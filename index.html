@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ごはんOS</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20261005-1">
 </head>
 <body>
   <header class="app-header">
@@ -42,22 +42,18 @@
           <label>ジャンル<select name="genre" id="formGenre" required></select></label>
           <label class="full">説明<textarea name="description" rows="2"></textarea></label>
         </div>
-
         <section class="form-section">
           <div class="section-title-row"><h3>材料</h3><button type="button" id="addIngredient" class="secondary-button">＋ 材料を追加</button></div>
           <div id="ingredientRows" class="ingredient-rows"></div>
         </section>
-
         <section class="form-section">
           <div class="section-title-row"><h3>作り方</h3><button type="button" id="addInstruction" class="secondary-button">＋ 手順を追加</button></div>
           <div id="instructionRows" class="instruction-rows"></div>
         </section>
-
         <section class="form-section">
           <h3>タグ</h3>
           <div id="tagChoices" class="tag-choices"></div>
         </section>
-
         <section class="form-section">
           <div class="toggle-row">
             <label><input name="is_favorite" type="checkbox"> お気に入り</label>
@@ -65,7 +61,6 @@
           </div>
           <label>メモ<textarea name="memo" rows="4"></textarea></label>
         </section>
-
         <div class="form-actions">
           <button type="button" id="cancelForm" class="secondary-button">キャンセル</button>
           <button type="submit" class="primary-button">保存</button>
@@ -86,7 +81,6 @@
         <button id="backFromShopping" class="text-button">← レシピ一覧</button>
         <h2>買い物</h2>
       </div>
-
       <section class="shopping-section">
         <div class="shopping-section-heading">
           <div>
@@ -102,7 +96,6 @@
           <button type="submit" class="secondary-button">＋ よく買うものを追加</button>
         </form>
       </section>
-
       <section class="shopping-section">
         <div class="shopping-section-heading">
           <div>
@@ -116,7 +109,6 @@
           <button type="submit" class="secondary-button">追加</button>
         </form>
       </section>
-
       <section class="shopping-section">
         <div class="shopping-section-heading">
           <div>
@@ -129,9 +121,8 @@
       </section>
     </section>
   </main>
-
   <div id="loading" class="loading hidden">読み込み中…</div>
   <div id="toast" class="toast hidden"></div>
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=20261005-1"></script>
 </body>
 </html>
