@@ -40,6 +40,12 @@ function fillSelect(select, values, firstLabel='') {
   select.innerHTML = (firstLabel ? `<option value="">${esc(firstLabel)}</option>` : '') +
     values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
 }
+function formatPurchaseDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('ja-JP', {year:'numeric', month:'numeric', day:'numeric'});
+}
 
 function setupStaticUI() {
   fillSelect($('categoryFilter'), CATEGORIES, '主カテゴリすべて');
@@ -47,6 +53,7 @@ function setupStaticUI() {
   fillSelect($('formCategory'), CATEGORIES);
   fillSelect($('formGenre'), GENRES);
   fillSelect($('shoppingInputCategory'), SHOPPING_CATEGORIES);
+  fillSelect($('shoppingMasterInputCategory'), SHOPPING_CATEGORIES);
 
   $('newRecipeButton').onclick = () => openForm();
   $('shoppingButton').onclick = () => openShopping();
@@ -57,6 +64,7 @@ function setupStaticUI() {
   $('addInstruction').onclick = () => addInstructionRow();
   $('recipeForm').onsubmit = saveRecipe;
   $('shoppingFreeForm').onsubmit = addFreeShoppingItem;
+  $('shoppingMasterForm').onsubmit = addShoppingMasterItem;
   $('addSelectedShopping').onclick = addSelectedShoppingItems;
   $('showPurchased').onchange = () => {
     state.showPurchased = $('showPurchased').checked;
@@ -346,13 +354,96 @@ function renderShoppingMaster() {
     return `<section class="shopping-category">
       <h3>${esc(category)}</h3>
       <div class="shopping-master-items">
-        ${items.map(item => `<label class="shopping-master-item">
-          <input class="shopping-master-check" type="checkbox" data-id="${item.id}" ${selected.has(item.id)?'checked':''}>
-          <span>${esc(item.name)}</span>
-        </label>`).join('')}
+        ${items.map(item => `<div class="shopping-master-item-wrap">
+          <label class="shopping-master-item">
+            <input class="shopping-master-check" type="checkbox" data-id="${item.id}" ${selected.has(item.id)?'checked':''}>
+            <span>${esc(item.name)}</span>
+          </label>
+          <button type="button" class="shopping-master-edit" data-id="${item.id}">編集</button>
+          <button type="button" class="shopping-master-delete" data-id="${item.id}">削除</button>
+        </div>`).join('')}
       </div>
     </section>`;
   }).join('');
+  document.querySelectorAll('.shopping-master-edit').forEach(button => {
+    button.onclick = () => editShoppingMasterItem(button.dataset.id);
+  });
+  document.querySelectorAll('.shopping-master-delete').forEach(button => {
+    button.onclick = () => deleteShoppingMasterItem(button.dataset.id);
+  });
+}
+
+async function addShoppingMasterItem(e) {
+  e.preventDefault();
+  const name = $('shoppingMasterInputName').value.trim();
+  const category = $('shoppingMasterInputCategory').value;
+  if (!name) {
+    toast('商品名を入力してください');
+    return;
+  }
+  if (state.shoppingMaster.some(item => item.name === name)) {
+    toast('その商品はすでによく買うものに登録されています');
+    return;
+  }
+  showLoading(true);
+  try {
+    const { error } = await supabase.from('shopping_master').insert({
+      name, category, sort_order: state.shoppingMaster.length
+    });
+    if (error) throw error;
+    $('shoppingMasterInputName').value = '';
+    await loadShoppingData();
+    toast('よく買うものに追加しました');
+  } catch(e) {
+    toast(`追加できませんでした: ${e.message}`);
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function editShoppingMasterItem(id) {
+  const item = state.shoppingMaster.find(x => x.id === id);
+  if (!item) return;
+  const name = prompt('商品名を変更', item.name);
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) {
+    toast('商品名を入力してください');
+    return;
+  }
+  if (state.shoppingMaster.some(x => x.id !== id && x.name === trimmed)) {
+    toast('同じ商品名がすでに登録されています');
+    return;
+  }
+  showLoading(true);
+  try {
+    const { error } = await supabase.from('shopping_master')
+      .update({ name: trimmed, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
+    await loadShoppingData();
+    toast('変更しました');
+  } catch(e) {
+    toast(`変更できませんでした: ${e.message}`);
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function deleteShoppingMasterItem(id) {
+  const item = state.shoppingMaster.find(x => x.id === id);
+  if (!item || !confirm(`「${item.name}」をよく買うものから削除しますか？\n買い物リストには影響しません。`)) return;
+  showLoading(true);
+  try {
+    const { error } = await supabase.from('shopping_master').delete().eq('id', id);
+    if (error) throw error;
+    await loadShoppingData();
+    toast('よく買うものから削除しました');
+  } catch(e) {
+    toast(`削除できませんでした: ${e.message}`);
+  } finally {
+    showLoading(false);
+  }
 }
 
 async function addSelectedShoppingItems() {
@@ -436,6 +527,7 @@ function renderShoppingList() {
         <span>${esc(item.name)}</span>
       </label>
       <span class="shopping-list-category">${esc(item.category)}</span>
+      <span class="shopping-purchased-date">${item.is_purchased && item.purchased_at ? `購入日 ${esc(formatPurchaseDate(item.purchased_at))}` : ''}</span>
       <button type="button" class="remove-button shopping-delete" data-id="${item.id}">削除</button>
     </div>`).join('');
   document.querySelectorAll('.purchase-check').forEach(input => {
@@ -449,12 +541,20 @@ function renderShoppingList() {
 async function togglePurchased(id, purchased) {
   showLoading(true);
   try {
+    const purchasedAt = purchased ? new Date().toISOString() : null;
     const { error } = await supabase.from('shopping_list_items')
-      .update({ is_purchased: purchased, updated_at: new Date().toISOString() })
+      .update({
+        is_purchased: purchased,
+        purchased_at: purchasedAt,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', id);
     if (error) throw error;
     const item = state.shoppingList.find(x => x.id === id);
-    if (item) item.is_purchased = purchased;
+    if (item) {
+      item.is_purchased = purchased;
+      item.purchased_at = purchasedAt;
+    }
     renderShoppingList();
   } catch(e) {
     toast(`更新できませんでした: ${e.message}`);
