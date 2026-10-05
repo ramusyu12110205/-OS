@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ごはんOS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">GOHAN OS</p>
+      <h1>ごはんOS</h1>
+    </div>
+    <button id="newRecipeButton" class="primary-button">＋ レシピ登録</button>
+  </header>
+
+  <main class="container">
+    <section id="listView" class="view">
+      <div class="toolbar">
+        <input id="searchInput" type="search" placeholder="レシピ名・材料名で検索">
+        <select id="categoryFilter"><option value="">主カテゴリすべて</option></select>
+        <select id="genreFilter"><option value="">ジャンルすべて</option></select>
+        <select id="tagFilter"><option value="">タグすべて</option></select>
+        <label class="check-filter"><input id="favoriteFilter" type="checkbox"> お気に入り</label>
+      </div>
+      <div id="recipeList" class="recipe-list"></div>
+    </section>
+
+    <section id="formView" class="view hidden">
+      <div class="section-heading">
+        <button id="backFromForm" class="text-button">← レシピ一覧</button>
+        <h2 id="formTitle">レシピ登録</h2>
+      </div>
+      <form id="recipeForm" class="recipe-form">
+        <div class="form-grid">
+          <label>レシピ名<input name="name" required maxlength="100"></label>
+          <label>主カテゴリ<select name="cooking_category" id="formCategory" required></select></label>
+          <label>ジャンル<select name="genre" id="formGenre" required></select></label>
+          <label class="full">説明<textarea name="description" rows="2"></textarea></label>
+        </div>
+
+        <section class="form-section">
+          <div class="section-title-row"><h3>材料</h3><button type="button" id="addIngredient" class="secondary-button">＋ 材料を追加</button></div>
+          <div id="ingredientRows" class="ingredient-rows"></div>
+        </section>
+
+        <section class="form-section">
+          <div class="section-title-row"><h3>作り方</h3><button type="button" id="addInstruction" class="secondary-button">＋ 手順を追加</button></div>
+          <div id="instructionRows" class="instruction-rows"></div>
+        </section>
+
+        <section class="form-section">
+          <h3>タグ</h3>
+          <div id="tagChoices" class="tag-choices"></div>
+        </section>
+
+        <section class="form-section">
+          <div class="toggle-row">
+            <label><input name="is_favorite" type="checkbox"> お気に入り</label>
+            <label><input name="make_again" type="checkbox"> また作りたい</label>
+          </div>
+          <label>メモ<textarea name="memo" rows="4"></textarea></label>
+        </section>
+
+        <div class="form-actions">
+          <button type="button" id="cancelForm" class="secondary-button">キャンセル</button>
+          <button type="submit" class="primary-button">保存</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="detailView" class="view hidden">
+      <div class="section-heading">
+        <button id="backFromDetail" class="text-button">← レシピ一覧</button>
+        <div class="detail-actions"><button id="editRecipe" class="secondary-button">編集</button><button id="deleteRecipe" class="danger-button">削除</button></div>
+      </div>
+      <article id="recipeDetail" class="recipe-detail"></article>
+    </section>
+  </main>
+
+  <div id="loading" class="loading hidden">読み込み中…</div>
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
