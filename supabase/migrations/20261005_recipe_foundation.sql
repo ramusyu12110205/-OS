@@ -49,4 +49,77 @@ insert into public.tags (name) values
   ('節約'),('作り置き'),('野菜多め'),('冷凍可能'),('お弁当向け')
 on conflict (name) do nothing;
 
--- RLS policies are managed in the live project and should remain user-owned.
+-- RLS: anonymous users receive the authenticated Postgres role.
+-- Recipes and their child rows are restricted to the current auth.uid().
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'recipes' and policyname = 'recipes_own_all'
+  ) then
+    create policy recipes_own_all on public.recipes
+      for all to authenticated
+      using (auth.uid() = user_id)
+      with check (auth.uid() = user_id);
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'recipe_ingredients' and policyname = 'recipe_ingredients_own_all'
+  ) then
+    create policy recipe_ingredients_own_all on public.recipe_ingredients
+      for all to authenticated
+      using (
+        exists (
+          select 1 from public.recipes r
+          where r.id = recipe_ingredients.recipe_id
+            and r.user_id = auth.uid()
+        )
+      )
+      with check (
+        exists (
+          select 1 from public.recipes r
+          where r.id = recipe_ingredients.recipe_id
+            and r.user_id = auth.uid()
+        )
+      );
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'recipe_tags' and policyname = 'recipe_tags_own_all'
+  ) then
+    create policy recipe_tags_own_all on public.recipe_tags
+      for all to authenticated
+      using (
+        exists (
+          select 1 from public.recipes r
+          where r.id = recipe_tags.recipe_id
+            and r.user_id = auth.uid()
+        )
+      )
+      with check (
+        exists (
+          select 1 from public.recipes r
+          where r.id = recipe_tags.recipe_id
+            and r.user_id = auth.uid()
+        )
+      );
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public' and tablename = 'tags' and policyname = 'tags_read_authenticated'
+  ) then
+    create policy tags_read_authenticated on public.tags
+      for select to authenticated
+      using (true);
+  end if;
+end
+$$;
+
+-- Data API privileges required before RLS policies can be evaluated.
+grant select, insert, update, delete on public.recipes to authenticated;
+grant select, insert, update, delete on public.recipe_ingredients to authenticated;
+grant select, insert, update, delete on public.recipe_tags to authenticated;
+grant select on public.tags to authenticated;
