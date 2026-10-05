@@ -9,7 +9,7 @@ const state = { recipes: [], tags: [], editingId: null, detailId: null };
 function esc(value='') { return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function showLoading(v) { $('loading').classList.toggle('hidden', !v); }
 function toast(message) { $('toast').textContent = message; $('toast').classList.remove('hidden'); setTimeout(() => $('toast').classList.add('hidden'), 2200); }
-function showView(name) { ['listView','formView','detailView'].forEach(id => $(id).classList.toggle('hidden', id !== name)); window.scrollTo({top:0,behavior:'instant'}); }
+function showView(name) { ['listView','formView','detailView'].forEach(id => $(id).classList.toggle('hidden', id !== name)); window.scrollTo({top:0,behavior:'auto'}); }
 
 function fillSelect(select, values, firstLabel='') {
   select.innerHTML = (firstLabel ? `<option value="">${esc(firstLabel)}</option>` : '') + values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
@@ -123,9 +123,11 @@ async function saveRecipe(e){
     let recipeId=state.editingId;
     const base={name:p.name,description:p.description,cooking_category:p.cooking_category,genre:p.genre,instructions:p.instructions,is_favorite:p.is_favorite,make_again:p.make_again,memo:p.memo};
     if(recipeId){const {error}=await supabase.from('recipes').update(base).eq('id',recipeId);if(error)throw error;} else {const {data,error}=await supabase.from('recipes').insert(base).select('id').single();if(error)throw error;recipeId=data.id;}
-    await supabase.from('recipe_ingredients').delete().eq('recipe_id',recipeId);
+    const { error: ingredientDeleteError } = await supabase.from('recipe_ingredients').delete().eq('recipe_id',recipeId);
+    if (ingredientDeleteError) throw ingredientDeleteError;
     if(p.ingredients.length){const {error}=await supabase.from('recipe_ingredients').insert(p.ingredients.map((x,i)=>({...x,recipe_id:recipeId,sort_order:i})));if(error)throw error;}
-    await supabase.from('recipe_tags').delete().eq('recipe_id',recipeId);
+    const { error: tagDeleteError } = await supabase.from('recipe_tags').delete().eq('recipe_id',recipeId);
+    if (tagDeleteError) throw tagDeleteError;
     if(p.tagIds.length){const {error}=await supabase.from('recipe_tags').insert(p.tagIds.map(tag_id=>({recipe_id:recipeId,tag_id})));if(error)throw error;}
     await loadRecipes(); state.detailId=recipeId; showView('detailView'); await openDetail(recipeId); toast('保存しました');
   }catch(e){toast(`保存できませんでした: ${e.message}`);}finally{showLoading(false);}
