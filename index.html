@@ -12,7 +12,10 @@
       <p class="eyebrow">GOHAN OS</p>
       <h1>ごはんOS</h1>
     </div>
-    <button id="newRecipeButton" class="primary-button">＋ レシピ登録</button>
+    <div class="header-actions">
+      <button id="shoppingButton" class="secondary-button">買い物</button>
+      <button id="newRecipeButton" class="primary-button">＋ レシピ登録</button>
+    </div>
   </header>
 
   <main class="container">
@@ -76,6 +79,49 @@
         <div class="detail-actions"><button id="editRecipe" class="secondary-button">編集</button><button id="deleteRecipe" class="danger-button">削除</button></div>
       </div>
       <article id="recipeDetail" class="recipe-detail"></article>
+    </section>
+
+    <section id="shoppingView" class="view hidden">
+      <div class="section-heading">
+        <button id="backFromShopping" class="text-button">← レシピ一覧</button>
+        <h2>買い物</h2>
+      </div>
+
+      <section class="shopping-section">
+        <div class="shopping-section-heading">
+          <div>
+            <h3>よく買うもの</h3>
+            <p class="meta">必要なものにチェックして、買い物リストへ追加します。</p>
+          </div>
+          <button id="addSelectedShopping" class="primary-button">選択したものをリストに追加</button>
+        </div>
+        <div id="shoppingMaster" class="shopping-master"></div>
+      </section>
+
+      <section class="shopping-section">
+        <div class="shopping-section-heading">
+          <div>
+            <h3>その他の買い物を追加</h3>
+            <p class="meta">登録されていないものも自由に追加できます。</p>
+          </div>
+        </div>
+        <form id="shoppingFreeForm" class="shopping-free-form">
+          <input id="shoppingInputName" type="text" maxlength="100" placeholder="例：牛乳、子供のお菓子、ラップ" required>
+          <select id="shoppingInputCategory"></select>
+          <button type="submit" class="secondary-button">追加</button>
+        </form>
+      </section>
+
+      <section class="shopping-section">
+        <div class="shopping-section-heading">
+          <div>
+            <h3>今日の買い物</h3>
+            <p id="shoppingListSummary" class="meta"></p>
+          </div>
+          <label class="check-filter"><input id="showPurchased" type="checkbox"> 購入済みを表示</label>
+        </div>
+        <div id="shoppingList" class="shopping-list"></div>
+      </section>
     </section>
   </main>
 
