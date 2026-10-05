@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ごはんOS</title>
-  <link rel="stylesheet" href="css/style.css?v=20261005-3">
+  <link rel="stylesheet" href="css/style.css?v=20261005-4">
 </head>
 <body>
   <header class="app-header">
@@ -87,7 +87,10 @@
             <h3>よく買うもの</h3>
             <p class="meta">必要なものにチェックして、買い物リストへ追加します。</p>
           </div>
-          <button id="addSelectedShopping" class="primary-button">選択したものをリストに追加</button>
+          <div class="header-actions">
+            <button id="deleteSelectedShopping" class="danger-button" type="button" disabled>選択したものを削除</button>
+            <button id="addSelectedShopping" class="primary-button">選択したものをリストに追加</button>
+          </div>
         </div>
         <div id="shoppingMaster" class="shopping-master"></div>
         <form id="shoppingMasterForm" class="shopping-master-form">
@@ -124,5 +127,33 @@
   <div id="loading" class="loading hidden">読み込み中…</div>
   <div id="toast" class="toast hidden"></div>
   <script type="module" src="js/app.js?v=20261005-1"></script>
+  <script type="module">
+    import { supabase } from './js/supabase.js';
+
+    const deleteButton = document.getElementById('deleteSelectedShopping');
+    const master = document.getElementById('shoppingMaster');
+
+    function updateDeleteButton() {
+      deleteButton.disabled = !master.querySelector('.shopping-master-check:checked');
+    }
+
+    master.addEventListener('change', updateDeleteButton);
+
+    deleteButton.addEventListener('click', async () => {
+      const ids = [...master.querySelectorAll('.shopping-master-check:checked')].map(input => input.dataset.id);
+      if (!ids.length) return;
+      if (!confirm(`${ids.length}件を「よく買うもの」から削除しますか？`)) return;
+
+      deleteButton.disabled = true;
+      const { error } = await supabase.from('shopping_master').delete().in('id', ids);
+      if (error) {
+        alert(`削除できませんでした: ${error.message}`);
+        updateDeleteButton();
+        return;
+      }
+
+      document.getElementById('shoppingButton').click();
+    });
+  </script>
 </body>
 </html>
