@@ -160,10 +160,10 @@ function renderAuthModal(user, message = '', error = '') {
 async function sendLinkEmail(event) {
   event.preventDefault();
   const email = document.getElementById('linkEmail').value.trim();
-  const { error } = await supabase.auth.updateUser({
-    email,
-    options: { emailRedirectTo: window.location.href.split('#')[0] }
-  });
+  const { error } = await supabase.auth.updateUser(
+    { email },
+    { emailRedirectTo: window.location.href.split('#')[0] }
+  );
   if (error) {
     renderAuthModal((await supabase.auth.getSession()).data?.session?.user, '', `登録できませんでした: ${error.message}`);
     return;
