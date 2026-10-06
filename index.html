@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ごはんOS</title>
-  <link rel="stylesheet" href="css/style.css?v=20261006-1">
+  <link rel="stylesheet" href="css/style.css?v=20261006-2">
 </head>
 <body>
   <header class="app-header">
@@ -13,6 +13,7 @@
       <h1>ごはんOS</h1>
     </div>
     <div class="header-actions">
+      <button id="ingredientsButton" class="secondary-button">食材</button>
       <button id="shoppingButton" class="secondary-button">買い物</button>
       <button id="newRecipeButton" class="primary-button">＋ レシピ登録</button>
     </div>
@@ -138,6 +139,42 @@
           <button id="backToShoppingButton" class="secondary-button" type="button">← 買い物に戻る</button>
         </div>
         <div id="shoppingHistory" class="shopping-history"></div>
+      </section>
+    </section>
+
+    <section id="ingredientsView" class="view hidden">
+      <div class="section-heading">
+        <button id="backFromIngredients" class="text-button">← レシピ一覧</button>
+        <h2>食材</h2>
+      </div>
+
+      <section class="ingredient-section">
+        <div class="ingredient-section-heading">
+          <div>
+            <h3>食材を登録</h3>
+            <p class="meta">登録した食材は「ある／ない」を別々に管理します。</p>
+          </div>
+        </div>
+        <form id="ingredientForm" class="ingredient-form">
+          <input id="ingredientInputName" type="text" maxlength="100" placeholder="食材名（例：豆腐）" required>
+          <select id="ingredientInputCategory"></select>
+          <button type="submit" class="primary-button">＋ 食材を登録</button>
+        </form>
+      </section>
+
+      <section class="ingredient-section">
+        <div class="ingredient-section-heading">
+          <div>
+            <h3>食材一覧</h3>
+            <p id="ingredientSummary" class="meta"></p>
+          </div>
+          <label class="check-filter"><input id="ingredientAvailableOnly" type="checkbox"> あるものだけ</label>
+        </div>
+        <div class="ingredient-toolbar">
+          <input id="ingredientSearch" type="search" placeholder="食材名で検索">
+          <select id="ingredientCategoryFilter"></select>
+        </div>
+        <div id="ingredientList" class="ingredient-list"></div>
       </section>
     </section>
   </main>
@@ -277,5 +314,6 @@
       shoppingMainContent.classList.remove('hidden');
     });
   </script>
+  <script type="module" src="js/ingredients.js?v=20261006-1"></script>
 </body>
 </html>
