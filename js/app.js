@@ -18,7 +18,8 @@ const DEFAULT_SHOPPING_MASTER = [
 const $ = (id) => document.getElementById(id);
 const state = {
   recipes: [], tags: [], editingId: null, detailId: null,
-  shoppingMaster: [], shoppingList: [], showPurchased: false
+  shoppingMaster: [], shoppingList: [], showPurchased: false,
+  shoppingPendingChanges: new Map()
 };
 
 function esc(value='') {
@@ -77,6 +78,128 @@ function setupStaticUI() {
   $('favoriteFilter').onchange = renderList;
   $('editRecipe').onclick = () => state.detailId && openForm(state.detailId);
   $('deleteRecipe').onclick = deleteCurrentRecipe;
+
+  setupShoppingPurchaseSelection();
+}
+
+function setupShoppingPurchaseSelection() {
+  const showPurchased = $('showPurchased');
+  const label = showPurchased.closest('.check-filter');
+  const actions = document.createElement('div');
+  actions.className = 'header-actions';
+  const button = document.createElement('button');
+  button.id = 'applyShoppingPurchase';
+  button.type = 'button';
+  button.className = 'primary-button';
+  button.textContent = '購入を反映';
+  button.disabled = true;
+  actions.appendChild(button);
+  label.parentElement.appendChild(actions);
+  actions.appendChild(label);
+
+  $('shoppingList').addEventListener('change', event => {
+    const input = event.target.closest('.purchase-check');
+    if (!input) return;
+
+    // This checkbox is a temporary selection. Do not write to the DB here.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    const id = input.dataset.id;
+    const item = state.shoppingList.find(x => x.id === id);
+    if (!item) return;
+
+    if (input.checked === item.is_purchased) {
+      state.shoppingPendingChanges.delete(id);
+    } else {
+      state.shoppingPendingChanges.set(id, input.checked);
+    }
+    updateShoppingPurchaseButton();
+  }, true);
+
+  button.onclick = commitShoppingPurchaseChanges;
+}
+
+function updateShoppingPurchaseButton() {
+  const button = $('applyShoppingPurchase');
+  if (!button) return;
+  const count = state.shoppingPendingChanges.size;
+  button.disabled = count === 0;
+  button.textContent = count ? `購入を反映（${count}件）` : '購入を反映';
+}
+
+async function commitShoppingPurchaseChanges() {
+  const changes = [...state.shoppingPendingChanges.entries()];
+  if (!changes.length) return;
+  if (!confirm(`${changes.length}件の購入状態を反映しますか？`)) return;
+
+  showLoading(true);
+  try {
+    for (const [id, targetPurchased] of changes) {
+      const item = state.shoppingList.find(x => x.id === id);
+      if (!item) {
+        state.shoppingPendingChanges.delete(id);
+        continue;
+      }
+
+      if (targetPurchased && !item.is_purchased) {
+        const purchasedAt = new Date().toISOString();
+        const { error: historyError } = await supabase.from('shopping_purchase_history').insert({
+          shopping_list_item_id: item.id,
+          name: item.name,
+          category: item.category,
+          master_id: item.master_id,
+          purchased_at: purchasedAt
+        });
+        if (historyError) throw historyError;
+
+        const { error: listError } = await supabase.from('shopping_list_items').update({
+          is_purchased: true,
+          purchased_at: purchasedAt,
+          updated_at: new Date().toISOString()
+        }).eq('id', id);
+        if (listError) {
+          await supabase.from('shopping_purchase_history')
+            .delete()
+            .eq('shopping_list_item_id', id)
+            .eq('purchased_at', purchasedAt);
+          throw listError;
+        }
+      } else if (!targetPurchased && item.is_purchased) {
+        if (item.purchased_at) {
+          const { data: historyRow, error: historyFindError } = await supabase.from('shopping_purchase_history')
+            .select('id')
+            .eq('shopping_list_item_id', id)
+            .eq('purchased_at', item.purchased_at)
+            .maybeSingle();
+          if (historyFindError) throw historyFindError;
+          if (historyRow) {
+            const { error: historyDeleteError } = await supabase.from('shopping_purchase_history')
+              .delete().eq('id', historyRow.id);
+            if (historyDeleteError) throw historyDeleteError;
+          }
+        }
+
+        const { error: listError } = await supabase.from('shopping_list_items').update({
+          is_purchased: false,
+          purchased_at: null,
+          updated_at: new Date().toISOString()
+        }).eq('id', id);
+        if (listError) throw listError;
+      }
+
+      state.shoppingPendingChanges.delete(id);
+    }
+
+    await loadShoppingData();
+    toast(`${changes.length}件を購入済みに反映しました`);
+  } catch(e) {
+    toast(`購入状態を反映できませんでした: ${e.message}`);
+    await loadShoppingData();
+  } finally {
+    updateShoppingPurchaseButton();
+    showLoading(false);
+  }
 }
 
 async function loadTags() {
@@ -340,8 +463,12 @@ async function loadShoppingData() {
   if (listError) throw listError;
   state.shoppingMaster = master || [];
   state.shoppingList = list || [];
+  for (const id of state.shoppingPendingChanges.keys()) {
+    if (!state.shoppingList.some(item => item.id === id)) state.shoppingPendingChanges.delete(id);
+  }
   renderShoppingMaster();
   renderShoppingList();
+  updateShoppingPurchaseButton();
 }
 
 function renderShoppingMaster() {
@@ -518,50 +645,27 @@ function renderShoppingList() {
     : 'まだ商品がありません';
   if (!visible.length) {
     $('shoppingList').innerHTML = `<div class="empty">${list.length ? '購入済みの商品はありません。' : '買い物リストは空です。'}</div>`;
+    updateShoppingPurchaseButton();
     return;
   }
-  $('shoppingList').innerHTML = visible.map(item => `
+  $('shoppingList').innerHTML = visible.map(item => {
+    const pending = state.shoppingPendingChanges.get(item.id);
+    const checked = pending !== undefined ? pending : item.is_purchased;
+    return `
     <div class="shopping-list-item ${item.is_purchased ? 'purchased' : ''}">
       <label class="shopping-list-check">
-        <input type="checkbox" class="purchase-check" data-id="${item.id}" ${item.is_purchased?'checked':''}>
+        <input type="checkbox" class="purchase-check" data-id="${item.id}" ${checked?'checked':''}>
         <span>${esc(item.name)}</span>
       </label>
       <span class="shopping-list-category">${esc(item.category)}</span>
       <span class="shopping-purchased-date">${item.is_purchased && item.purchased_at ? `購入日 ${esc(formatPurchaseDate(item.purchased_at))}` : ''}</span>
       <button type="button" class="remove-button shopping-delete" data-id="${item.id}">削除</button>
-    </div>`).join('');
-  document.querySelectorAll('.purchase-check').forEach(input => {
-    input.onchange = () => togglePurchased(input.dataset.id, input.checked);
-  });
+    </div>`;
+  }).join('');
   document.querySelectorAll('.shopping-delete').forEach(button => {
     button.onclick = () => deleteShoppingItem(button.dataset.id);
   });
-}
-
-async function togglePurchased(id, purchased) {
-  showLoading(true);
-  try {
-    const purchasedAt = purchased ? new Date().toISOString() : null;
-    const { error } = await supabase.from('shopping_list_items')
-      .update({
-        is_purchased: purchased,
-        purchased_at: purchasedAt,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id);
-    if (error) throw error;
-    const item = state.shoppingList.find(x => x.id === id);
-    if (item) {
-      item.is_purchased = purchased;
-      item.purchased_at = purchasedAt;
-    }
-    renderShoppingList();
-  } catch(e) {
-    toast(`更新できませんでした: ${e.message}`);
-    renderShoppingList();
-  } finally {
-    showLoading(false);
-  }
+  updateShoppingPurchaseButton();
 }
 
 async function deleteShoppingItem(id) {
@@ -570,6 +674,7 @@ async function deleteShoppingItem(id) {
   try {
     const { error } = await supabase.from('shopping_list_items').delete().eq('id', id);
     if (error) throw error;
+    state.shoppingPendingChanges.delete(id);
     state.shoppingList = state.shoppingList.filter(item => item.id !== id);
     renderShoppingList();
     toast('削除しました');
