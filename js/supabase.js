@@ -38,14 +38,16 @@ function setupAuthUI(user) {
   const style = document.createElement('style');
   style.textContent = `
     .account-button{min-width:76px}
-    .pin-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.48);display:flex;align-items:center;justify-content:center;padding:20px;z-index:1000}
-    .pin-modal-backdrop.hidden{display:none}
-    .pin-modal{width:min(380px,100%);background:#fff;border-radius:16px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.24);text-align:center}
+    .pin-modal-backdrop{position:fixed;inset:0;width:100%;height:100%;background:rgba(0,0,0,.48);display:flex;align-items:center;justify-content:center;padding:16px;z-index:1000;box-sizing:border-box}
+    .pin-modal-backdrop.hidden{display:none!important}
+    .pin-modal{width:min(380px,calc(100vw - 32px));max-width:100%;max-height:calc(100dvh - 32px);overflow:auto;box-sizing:border-box;background:#fff;border-radius:16px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.24);text-align:center}
+    .pin-modal *{box-sizing:border-box;max-width:100%}
     .pin-modal h2{margin:0 0 10px}
     .pin-modal p{line-height:1.6;color:#555}
-    .pin-form{display:grid;gap:12px;margin-top:18px}
+    .pin-form{display:grid;gap:12px;margin-top:18px;width:100%;min-width:0}
+    .pin-form input,.pin-form button{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
     .pin-input{font-size:28px;letter-spacing:.45em;text-align:center;padding:12px}
-    .pin-error{color:#b42318;min-height:24px;margin-top:10px}
+    .pin-error{color:#b42318;min-height:24px;margin-top:10px;overflow-wrap:anywhere}
     .pin-note{font-size:.88rem;color:#777}
   `;
   document.head.appendChild(style);
