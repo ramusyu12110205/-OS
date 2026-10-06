@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ごはんOS</title>
-  <link rel="stylesheet" href="css/style.css?v=20261005-4">
+  <link rel="stylesheet" href="css/style.css?v=20261006-1">
 </head>
 <body>
   <header class="app-header">
@@ -79,48 +79,65 @@
     <section id="shoppingView" class="view hidden">
       <div class="section-heading">
         <button id="backFromShopping" class="text-button">← レシピ一覧</button>
-        <h2>買い物</h2>
+        <div class="shopping-heading-actions">
+          <h2>買い物</h2>
+          <button id="shoppingHistoryButton" class="secondary-button" type="button">買い物履歴</button>
+        </div>
       </div>
-      <section class="shopping-section">
+
+      <div id="shoppingMainContent">
+        <section class="shopping-section">
+          <div class="shopping-section-heading">
+            <div>
+              <h3>よく買うもの</h3>
+              <p class="meta">必要なものにチェックして、買い物リストへ追加します。</p>
+            </div>
+            <div class="header-actions">
+              <button id="deleteSelectedShopping" class="danger-button" type="button" disabled>選択したものを削除</button>
+              <button id="addSelectedShopping" class="primary-button">選択したものをリストに追加</button>
+            </div>
+          </div>
+          <div id="shoppingMaster" class="shopping-master"></div>
+          <form id="shoppingMasterForm" class="shopping-master-form">
+            <input id="shoppingMasterInputName" type="text" maxlength="100" placeholder="よく買うものを追加（例：豆腐）" required>
+            <select id="shoppingMasterInputCategory"></select>
+            <button type="submit" class="secondary-button">＋ よく買うものを追加</button>
+          </form>
+        </section>
+        <section class="shopping-section">
+          <div class="shopping-section-heading">
+            <div>
+              <h3>その他の買い物を追加</h3>
+              <p class="meta">登録されていないものも自由に追加できます。</p>
+            </div>
+          </div>
+          <form id="shoppingFreeForm" class="shopping-free-form">
+            <input id="shoppingInputName" type="text" maxlength="100" placeholder="例：牛乳、子供のお菓子、ラップ" required>
+            <select id="shoppingInputCategory"></select>
+            <button type="submit" class="secondary-button">追加</button>
+          </form>
+        </section>
+        <section class="shopping-section">
+          <div class="shopping-section-heading">
+            <div>
+              <h3>今日の買い物</h3>
+              <p id="shoppingListSummary" class="meta"></p>
+            </div>
+            <label class="check-filter"><input id="showPurchased" type="checkbox"> 購入済みを表示</label>
+          </div>
+          <div id="shoppingList" class="shopping-list"></div>
+        </section>
+      </div>
+
+      <section id="shoppingHistorySection" class="shopping-section hidden">
         <div class="shopping-section-heading">
           <div>
-            <h3>よく買うもの</h3>
-            <p class="meta">必要なものにチェックして、買い物リストへ追加します。</p>
+            <h3>買い物履歴</h3>
+            <p class="meta">実際に購入済みにした記録です。買い物リストから削除しても残ります。</p>
           </div>
-          <div class="header-actions">
-            <button id="deleteSelectedShopping" class="danger-button" type="button" disabled>選択したものを削除</button>
-            <button id="addSelectedShopping" class="primary-button">選択したものをリストに追加</button>
-          </div>
+          <button id="backToShoppingButton" class="secondary-button" type="button">← 買い物に戻る</button>
         </div>
-        <div id="shoppingMaster" class="shopping-master"></div>
-        <form id="shoppingMasterForm" class="shopping-master-form">
-          <input id="shoppingMasterInputName" type="text" maxlength="100" placeholder="よく買うものを追加（例：豆腐）" required>
-          <select id="shoppingMasterInputCategory"></select>
-          <button type="submit" class="secondary-button">＋ よく買うものを追加</button>
-        </form>
-      </section>
-      <section class="shopping-section">
-        <div class="shopping-section-heading">
-          <div>
-            <h3>その他の買い物を追加</h3>
-            <p class="meta">登録されていないものも自由に追加できます。</p>
-          </div>
-        </div>
-        <form id="shoppingFreeForm" class="shopping-free-form">
-          <input id="shoppingInputName" type="text" maxlength="100" placeholder="例：牛乳、子供のお菓子、ラップ" required>
-          <select id="shoppingInputCategory"></select>
-          <button type="submit" class="secondary-button">追加</button>
-        </form>
-      </section>
-      <section class="shopping-section">
-        <div class="shopping-section-heading">
-          <div>
-            <h3>今日の買い物</h3>
-            <p id="shoppingListSummary" class="meta"></p>
-          </div>
-          <label class="check-filter"><input id="showPurchased" type="checkbox"> 購入済みを表示</label>
-        </div>
-        <div id="shoppingList" class="shopping-list"></div>
+        <div id="shoppingHistory" class="shopping-history"></div>
       </section>
     </section>
   </main>
@@ -132,6 +149,12 @@
 
     const deleteButton = document.getElementById('deleteSelectedShopping');
     const master = document.getElementById('shoppingMaster');
+    const shoppingList = document.getElementById('shoppingList');
+    const historyButton = document.getElementById('shoppingHistoryButton');
+    const backToShoppingButton = document.getElementById('backToShoppingButton');
+    const shoppingMainContent = document.getElementById('shoppingMainContent');
+    const historySection = document.getElementById('shoppingHistorySection');
+    const historyContainer = document.getElementById('shoppingHistory');
 
     function updateDeleteButton() {
       deleteButton.disabled = !master.querySelector('.shopping-master-check:checked');
@@ -154,6 +177,216 @@
 
       document.getElementById('shoppingButton').click();
     });
+
+    function formatHistoryDate(value) {
+      const date = new Date(value);
+      return date.toLocaleDateString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short' });
+    }
+
+    function formatHistoryMonth(value) {
+      const date = new Date(value);
+      return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+    }
+
+    async function loadPurchaseHistory() {
+      historyContainer.innerHTML = '<div class="empty">読み込み中…</div>';
+      const { data, error } = await supabase.from('shopping_purchase_history')
+        .select('*')
+        .order('purchased_at', { ascending: false });
+      if (error) {
+        historyContainer.innerHTML = `<div class="empty">履歴を読み込めませんでした。<br>${String(error.message).replace(/[&<>"']/g, '')}</div>`;
+        return;
+      }
+      renderPurchaseHistory(data || []);
+    }
+
+    function renderPurchaseHistory(history) {
+      if (!history.length) {
+        historyContainer.innerHTML = '<div class="empty">まだ購入履歴がありません。</div>';
+        return;
+      }
+
+      const months = [];
+      const monthMap = new Map();
+      history.forEach(item => {
+        const date = new Date(item.purchased_at);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const dateKey = `${monthKey}-${String(date.getDate()).padStart(2, '0')}`;
+        let month = monthMap.get(monthKey);
+        if (!month) {
+          month = { key: monthKey, label: formatHistoryMonth(item.purchased_at), dates: [], dateMap: new Map() };
+          monthMap.set(monthKey, month);
+          months.push(month);
+        }
+        let day = month.dateMap.get(dateKey);
+        if (!day) {
+          day = { key: dateKey, label: formatHistoryDate(item.purchased_at), items: [] };
+          month.dateMap.set(dateKey, day);
+          month.dates.push(day);
+        }
+        day.items.push(item);
+      });
+
+      historyContainer.innerHTML = months.map(month => `
+        <section class="shopping-history-month">
+          <h4>${month.label}</h4>
+          ${month.dates.map(day => `
+            <div class="shopping-history-day">
+              <h5>${day.label}</h5>
+              <div class="shopping-history-items">
+                ${day.items.map(item => `
+                  <div class="shopping-history-item">
+                    <div>
+                      <span class="shopping-history-name">${escapeHtml(item.name)}</span>
+                      <span class="shopping-history-category">${escapeHtml(item.category)}</span>
+                    </div>
+                    <button type="button" class="remove-button history-delete" data-id="${item.id}">削除</button>
+                  </div>`).join('')}
+              </div>
+            </div>`).join('')}
+        </section>`).join('');
+
+      historyContainer.querySelectorAll('.history-delete').forEach(button => {
+        button.onclick = () => deletePurchaseHistory(button.dataset.id);
+      });
+    }
+
+    function escapeHtml(value = '') {
+      return String(value).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    async function deletePurchaseHistory(id) {
+      if (!confirm('この購入履歴を削除しますか？\n買い物リストの状態は変更しません。')) return;
+      const { error } = await supabase.from('shopping_purchase_history').delete().eq('id', id);
+      if (error) {
+        alert(`削除できませんでした: ${error.message}`);
+        return;
+      }
+      await loadPurchaseHistory();
+    }
+
+    historyButton.addEventListener('click', async () => {
+      shoppingMainContent.classList.add('hidden');
+      historySection.classList.remove('hidden');
+      await loadPurchaseHistory();
+    });
+
+    backToShoppingButton.addEventListener('click', () => {
+      historySection.classList.add('hidden');
+      shoppingMainContent.classList.remove('hidden');
+    });
+
+    // Own the purchase toggle so the list state and history record stay in sync.
+    shoppingList.addEventListener('change', async event => {
+      const input = event.target.closest('.purchase-check');
+      if (!input) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      input.disabled = true;
+
+      const id = input.dataset.id;
+      const targetPurchased = input.checked;
+      const { data: item, error: itemError } = await supabase.from('shopping_list_items')
+        .select('id,name,category,master_id,is_purchased,purchased_at')
+        .eq('id', id)
+        .single();
+
+      if (itemError) {
+        input.checked = !targetPurchased;
+        input.disabled = false;
+        alert(`購入状態を更新できませんでした: ${itemError.message}`);
+        return;
+      }
+
+      if (targetPurchased) {
+        const purchasedAt = new Date().toISOString();
+        const { data: historyRow, error: historyError } = await supabase.from('shopping_purchase_history')
+          .insert({
+            shopping_list_item_id: item.id,
+            name: item.name,
+            category: item.category,
+            master_id: item.master_id,
+            purchased_at: purchasedAt
+          })
+          .select('id')
+          .single();
+
+        if (historyError) {
+          input.checked = false;
+          input.disabled = false;
+          alert(`購入履歴を保存できませんでした: ${historyError.message}`);
+          return;
+        }
+
+        const { error: listError } = await supabase.from('shopping_list_items').update({
+          is_purchased: true,
+          purchased_at: purchasedAt,
+          updated_at: new Date().toISOString()
+        }).eq('id', id);
+
+        if (listError) {
+          await supabase.from('shopping_purchase_history').delete().eq('id', historyRow.id);
+          input.checked = false;
+          input.disabled = false;
+          alert(`購入状態を更新できませんでした: ${listError.message}`);
+          return;
+        }
+      } else {
+        let historyRow = null;
+        if (item.purchased_at) {
+          const { data, error: historyFindError } = await supabase.from('shopping_purchase_history')
+            .select('id,shopping_list_item_id,name,category,master_id,purchased_at,created_at')
+            .eq('shopping_list_item_id', id)
+            .eq('purchased_at', item.purchased_at)
+            .maybeSingle();
+          if (historyFindError) {
+            input.checked = true;
+            input.disabled = false;
+            alert(`購入履歴を確認できませんでした: ${historyFindError.message}`);
+            return;
+          }
+          historyRow = data;
+        }
+
+        if (historyRow) {
+          const { error: historyDeleteError } = await supabase.from('shopping_purchase_history').delete().eq('id', historyRow.id);
+          if (historyDeleteError) {
+            input.checked = true;
+            input.disabled = false;
+            alert(`購入履歴を取り消せませんでした: ${historyDeleteError.message}`);
+            return;
+          }
+        }
+
+        const { error: listError } = await supabase.from('shopping_list_items').update({
+          is_purchased: false,
+          purchased_at: null,
+          updated_at: new Date().toISOString()
+        }).eq('id', id);
+
+        if (listError) {
+          if (historyRow) {
+            await supabase.from('shopping_purchase_history').insert({
+              id: historyRow.id,
+              shopping_list_item_id: historyRow.shopping_list_item_id,
+              name: historyRow.name,
+              category: historyRow.category,
+              master_id: historyRow.master_id,
+              purchased_at: historyRow.purchased_at,
+              created_at: historyRow.created_at
+            });
+          }
+          input.checked = true;
+          input.disabled = false;
+          alert(`購入状態を更新できませんでした: ${listError.message}`);
+          return;
+        }
+      }
+
+      document.getElementById('shoppingButton').click();
+    }, true);
   </script>
 </body>
 </html>
