@@ -143,13 +143,12 @@
   </main>
   <div id="loading" class="loading hidden">読み込み中…</div>
   <div id="toast" class="toast hidden"></div>
-  <script type="module" src="js/app.js?v=20261005-1"></script>
+  <script type="module" src="js/app.js?v=20261006-2"></script>
   <script type="module">
     import { supabase } from './js/supabase.js';
 
     const deleteButton = document.getElementById('deleteSelectedShopping');
     const master = document.getElementById('shoppingMaster');
-    const shoppingList = document.getElementById('shoppingList');
     const historyButton = document.getElementById('shoppingHistoryButton');
     const backToShoppingButton = document.getElementById('backToShoppingButton');
     const shoppingMainContent = document.getElementById('shoppingMainContent');
@@ -277,116 +276,6 @@
       historySection.classList.add('hidden');
       shoppingMainContent.classList.remove('hidden');
     });
-
-    // Own the purchase toggle so the list state and history record stay in sync.
-    shoppingList.addEventListener('change', async event => {
-      const input = event.target.closest('.purchase-check');
-      if (!input) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      input.disabled = true;
-
-      const id = input.dataset.id;
-      const targetPurchased = input.checked;
-      const { data: item, error: itemError } = await supabase.from('shopping_list_items')
-        .select('id,name,category,master_id,is_purchased,purchased_at')
-        .eq('id', id)
-        .single();
-
-      if (itemError) {
-        input.checked = !targetPurchased;
-        input.disabled = false;
-        alert(`購入状態を更新できませんでした: ${itemError.message}`);
-        return;
-      }
-
-      if (targetPurchased) {
-        const purchasedAt = new Date().toISOString();
-        const { data: historyRow, error: historyError } = await supabase.from('shopping_purchase_history')
-          .insert({
-            shopping_list_item_id: item.id,
-            name: item.name,
-            category: item.category,
-            master_id: item.master_id,
-            purchased_at: purchasedAt
-          })
-          .select('id')
-          .single();
-
-        if (historyError) {
-          input.checked = false;
-          input.disabled = false;
-          alert(`購入履歴を保存できませんでした: ${historyError.message}`);
-          return;
-        }
-
-        const { error: listError } = await supabase.from('shopping_list_items').update({
-          is_purchased: true,
-          purchased_at: purchasedAt,
-          updated_at: new Date().toISOString()
-        }).eq('id', id);
-
-        if (listError) {
-          await supabase.from('shopping_purchase_history').delete().eq('id', historyRow.id);
-          input.checked = false;
-          input.disabled = false;
-          alert(`購入状態を更新できませんでした: ${listError.message}`);
-          return;
-        }
-      } else {
-        let historyRow = null;
-        if (item.purchased_at) {
-          const { data, error: historyFindError } = await supabase.from('shopping_purchase_history')
-            .select('id,shopping_list_item_id,name,category,master_id,purchased_at,created_at')
-            .eq('shopping_list_item_id', id)
-            .eq('purchased_at', item.purchased_at)
-            .maybeSingle();
-          if (historyFindError) {
-            input.checked = true;
-            input.disabled = false;
-            alert(`購入履歴を確認できませんでした: ${historyFindError.message}`);
-            return;
-          }
-          historyRow = data;
-        }
-
-        if (historyRow) {
-          const { error: historyDeleteError } = await supabase.from('shopping_purchase_history').delete().eq('id', historyRow.id);
-          if (historyDeleteError) {
-            input.checked = true;
-            input.disabled = false;
-            alert(`購入履歴を取り消せませんでした: ${historyDeleteError.message}`);
-            return;
-          }
-        }
-
-        const { error: listError } = await supabase.from('shopping_list_items').update({
-          is_purchased: false,
-          purchased_at: null,
-          updated_at: new Date().toISOString()
-        }).eq('id', id);
-
-        if (listError) {
-          if (historyRow) {
-            await supabase.from('shopping_purchase_history').insert({
-              id: historyRow.id,
-              shopping_list_item_id: historyRow.shopping_list_item_id,
-              name: historyRow.name,
-              category: historyRow.category,
-              master_id: historyRow.master_id,
-              purchased_at: historyRow.purchased_at,
-              created_at: historyRow.created_at
-            });
-          }
-          input.checked = true;
-          input.disabled = false;
-          alert(`購入状態を更新できませんでした: ${listError.message}`);
-          return;
-        }
-      }
-
-      document.getElementById('shoppingButton').click();
-    }, true);
   </script>
 </body>
 </html>
