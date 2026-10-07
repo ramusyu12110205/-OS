@@ -1,248 +1,45 @@
 import { supabase, ensureAuth } from './supabase.js?v=20261007-1';
 
-const CATEGORIES = ['主菜','副菜','汁物','主食','デザート','その他'];
-const GENRES = ['和食','洋食','中華','韓国','エスニック','その他'];
-const SHOPPING_CATEGORIES = ['肉・魚・卵','野菜','調味料','乳製品','パン・パスタ・主食','冷凍食品','日用品','その他'];
-
-const DEFAULT_SHOPPING_MASTER = [
-  ['肉・魚・卵', ['豚こま','鶏もも','鶏むね','豚バラ','ひき肉','卵']],
-  ['野菜', ['玉ねぎ','にんじん','じゃがいも','キャベツ','ピーマン','きのこ','トマト','レタス']],
-  ['調味料', ['醤油','みそ','砂糖','塩','こしょう','料理酒','みりん']],
-  ['乳製品', ['牛乳','ヨーグルト','チーズ']],
-  ['パン・パスタ・主食', ['食パン','米','パスタ','うどん']],
-  ['冷凍食品', ['冷凍うどん','冷凍野菜','冷凍食品']],
-  ['日用品', ['ラップ','キッチンペーパー','ティッシュ','食器用洗剤']],
-  ['その他', ['納豆','子供のお菓子']]
-];
-
-const $ = (id) => document.getElementById(id);
-const state = {
-  recipes: [], tags: [], editingId: null, detailId: null,
-  shoppingMaster: [], shoppingList: [], shoppingPendingChanges: new Map(), showPurchased: false,
-  ingredients: [], ingredientEditingId: null
-};
-
-const INGREDIENT_CATEGORIES = ['肉・魚・卵','野菜','調味料','乳製品','パン・パスタ・主食','冷凍食品','その他'];
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[char]));
+const CATEGORIES=['主菜','副菜','汁物','主食','デザート','その他'];
+const GENRES=['和食','洋食','中華','韓国','エスニック','その他'];
+const SHOPPING_CATEGORIES=['肉・魚・卵','野菜','調味料','乳製品','パン・パスタ・主食','冷凍食品','日用品','その他'];
+const DEFAULT_SHOPPING_MASTER=[['肉・魚・卵',['豚こま','鶏もも','鶏むね','豚バラ','ひき肉','卵']],['野菜',['玉ねぎ','にんじん','じゃがいも','キャベツ','ピーマン','きのこ','トマト','レタス']],['調味料',['醤油','みそ','砂糖','塩','こしょう','料理酒','みりん']],['乳製品',['牛乳','ヨーグルト','チーズ']],['パン・パスタ・主食',['食パン','米','パスタ','うどん']],['冷凍食品',['冷凍うどん','冷凍野菜','冷凍食品']],['日用品',['ラップ','キッチンペーパー','ティッシュ','食器用洗剤']],['その他',['納豆','子供のお菓子']]];
+const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const state={recipes:[],tags:[],editingId:null,detailId:null,shoppingMaster:[],shoppingList:[],shoppingPendingChanges:new Map(),showPurchased:false};
+function loading(v){$('loading').classList.toggle('hidden',!v)}
+function toast(m){const e=$('toast');e.textContent=m;e.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.add('hidden'),2200)}
+function view(id){document.querySelectorAll('.view').forEach(x=>x.classList.add('hidden'));$(id).classList.remove('hidden');window.scrollTo({top:0,behavior:'auto'})}
+function fillSelect(el,values,first=''){el.innerHTML=(first?`<option value="">${esc(first)}</option>`:'')+values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}
+function setup(){
+ fillSelect($('categoryFilter'),CATEGORIES,'主カテゴリすべて');fillSelect($('genreFilter'),GENRES,'ジャンルすべて');fillSelect($('formCategory'),CATEGORIES);fillSelect($('formGenre'),GENRES);fillSelect($('shoppingInputCategory'),SHOPPING_CATEGORIES);fillSelect($('shoppingMasterInputCategory'),SHOPPING_CATEGORIES);
+ $('newRecipeButton').onclick=()=>openForm();$('shoppingButton').onclick=()=>openShopping();$('backFromForm').onclick=$('cancelForm').onclick=()=>view('listView');$('backFromDetail').onclick=()=>view('listView');$('backFromShopping').onclick=()=>view('listView');$('addIngredient').onclick=()=>addIngredientRow();$('addInstruction').onclick=()=>addInstructionRow();$('recipeForm').onsubmit=saveRecipe;$('shoppingFreeForm').onsubmit=addFreeShoppingItem;$('shoppingMasterForm').onsubmit=addShoppingMasterItem;$('addSelectedShopping').onclick=addSelectedShoppingItems;$('showPurchased').onchange=()=>{state.showPurchased=$('showPurchased').checked;renderShoppingList()};$('searchInput').oninput=renderList;['categoryFilter','genreFilter','tagFilter','favoriteFilter'].forEach(id=>$(id).onchange=renderList);$('editRecipe').onclick=()=>state.detailId&&openForm(state.detailId);$('deleteRecipe').onclick=deleteCurrentRecipe;setupPurchaseSelection();
 }
-
-function setLoading(loading) { $('loading').classList.toggle('hidden', !loading); }
-function toast(message) { const el = $('toast'); el.textContent = message; el.classList.remove('hidden'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.add('hidden'), 2200); }
-
-async function init() {
-  try {
-    setLoading(true);
-    await ensureAuth();
-    await loadTags();
-    await loadRecipes();
-    setupStaticUI();
-    await loadShoppingData();
-    await loadIngredients();
-    setupIngredientUI();
-    renderRecipeList();
-    showListView();
-  } catch (error) {
-    console.error(error);
-    toast(`読み込みに失敗しました: ${error.message}`);
-  } finally {
-    setLoading(false);
-  }
-}
-
-function setupStaticUI() {
-  $('searchInput').addEventListener('input', renderRecipeList);
-  ['categoryFilter','genreFilter','tagFilter','favoriteFilter'].forEach(id => $(id).addEventListener('change', renderRecipeList));
-  $('newRecipeButton').addEventListener('click', () => openRecipeForm());
-  $('ingredientsButton').addEventListener('click', openIngredientsView);
-  $('shoppingButton').addEventListener('click', openShoppingView);
-  $('backToListButton').addEventListener('click', showListView);
-  $('cancelRecipeButton').addEventListener('click', showListView);
-  $('recipeForm').addEventListener('submit', saveRecipe);
-  $('addIngredientButton').addEventListener('click', () => addIngredientRow());
-  $('addInstructionButton').addEventListener('click', () => addInstructionRow());
-  $('tagChoices').addEventListener('click', toggleTagChoice);
-  $('recipeList').addEventListener('click', handleRecipeListClick);
-  $('detailView').addEventListener('click', handleDetailClick);
-  $('shoppingMaster').addEventListener('change', updateShoppingMasterDeleteButton);
-  $('shoppingMaster').addEventListener('click', handleShoppingMasterClick);
-  $('addShoppingMasterButton').addEventListener('click', addShoppingMasterItem);
-  $('shoppingFreeForm').addEventListener('submit', addFreeShoppingItem);
-  $('shoppingList').addEventListener('click', handleShoppingListClick);
-  $('shoppingList').addEventListener('change', event => {
-    const input = event.target.closest('.purchase-check');
-    if (!input) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const id = input.dataset.id;
-    const item = state.shoppingList.find(x => x.id === id);
-    if (!item) return;
-    if (input.checked === item.is_purchased) {
-      state.shoppingPendingChanges.delete(id);
-    } else {
-      state.shoppingPendingChanges.set(id, input.checked);
-    }
-    updateShoppingPurchaseButton();
-  }, true);
-  $('applyShoppingPurchase').addEventListener('click', commitShoppingPurchaseChanges);
-  $('showPurchasedToggle').addEventListener('change', event => { state.showPurchased = event.target.checked; renderShoppingList(); });
-  $('shoppingHistoryButton').addEventListener('click', openShoppingHistoryView);
-  $('shoppingHistoryBackButton').addEventListener('click', openShoppingView);
-  $('shoppingHistory').addEventListener('click', handleShoppingHistoryClick);
-}
-
-function renderShoppingMaster() {
-  const categories = [...new Set([...SHOPPING_CATEGORIES, ...state.shoppingMaster.map(item => item.category)])];
-  const grouped = new Map(categories.map(category => [category, []]));
-  state.shoppingMaster.forEach(item => {
-    if (!grouped.has(item.category)) grouped.set(item.category, []);
-    grouped.get(item.category).push(item);
-  });
-  const visibleGroups = [...grouped.entries()].filter(([, items]) => items.length);
-  $('shoppingMaster').innerHTML = visibleGroups.length ? visibleGroups.map(([category, items]) => `
-    <div class="shopping-category">
-      <h3>${escapeHtml(category)}</h3>
-      <div class="shopping-master-items">
-        ${items.map(item => `
-          <label class="shopping-master-item-wrap">
-            <span class="shopping-master-item">
-              <input class="shopping-master-check" type="checkbox" data-id="${item.id}">
-              <span>${escapeHtml(item.name)}</span>
-            </span>
-          </label>`).join('')}
-      </div>
-    </div>`).join('') : '<div class="empty">よく買うものはまだありません。</div>';
-  updateShoppingMasterDeleteButton();
-}
-
-function updateShoppingMasterDeleteButton() {
-  const button = $('deleteShoppingMasterButton');
-  if (!button) return;
-  button.disabled = !$('shoppingMaster').querySelector('.shopping-master-check:checked');
-}
-
-async function addShoppingMasterItem(event) {
-  event?.preventDefault();
-  const name = $('shoppingMasterName').value.trim();
-  const category = $('shoppingMasterCategory').value;
-  if (!name) return;
-  setLoading(true);
-  try {
-    const { error } = await supabase.from('shopping_master').insert({ name, category });
-    if (error) throw error;
-    $('shoppingMasterName').value = '';
-    await loadShoppingData();
-    toast('よく買うものに追加しました');
-  } catch (error) { toast(`追加に失敗しました: ${error.message}`); } finally { setLoading(false); }
-}
-
-async function addSelectedShoppingItems() {
-  const selected = [...document.querySelectorAll('.shopping-master-check:checked')];
-  if (!selected.length) return;
-  const masterById = new Map(state.shoppingMaster.map(item => [item.id, item]));
-  const rows = selected.map(input => { const item = masterById.get(input.dataset.id); return item ? { name: item.name, category: item.category, master_id: item.id } : null; }).filter(Boolean);
-  if (!rows.length) return;
-  setLoading(true);
-  try {
-    const { error } = await supabase.from('shopping_list_items').insert(rows);
-    if (error) throw error;
-    selected.forEach(input => { input.checked = false; });
-    updateShoppingMasterDeleteButton();
-    await loadShoppingData();
-    toast(`${rows.length}件を買い物リストに追加しました`);
-  } catch (error) { toast(`追加に失敗しました: ${error.message}`); } finally { setLoading(false); }
-}
-
-async function deleteSelectedShoppingMasterItems() {
-  const ids = [...document.querySelectorAll('.shopping-master-check:checked')].map(input => input.dataset.id);
-  if (!ids.length) return;
-  if (!confirm(`${ids.length}件の「よく買うもの」を削除しますか？`)) return;
-  setLoading(true);
-  try {
-    const { error } = await supabase.from('shopping_master').delete().in('id', ids);
-    if (error) throw error;
-    await loadShoppingData();
-    toast(`${ids.length}件を削除しました`);
-  } catch (error) { toast(`削除に失敗しました: ${error.message}`); } finally { setLoading(false); }
-}
-
-async function editShoppingMasterItem(id) { const item = state.shoppingMaster.find(x => x.id === id); if (!item) return; const name = prompt('商品名', item.name); if (name === null) return; const nextName = name.trim(); if (!nextName) return; const category = prompt(`カテゴリ\n${SHOPPING_CATEGORIES.join(' / ')}`, item.category); if (category === null) return; const nextCategory = category.trim(); if (!nextCategory) return; setLoading(true); try { const { error } = await supabase.from('shopping_master').update({ name: nextName, category: nextCategory, updated_at: new Date().toISOString() }).eq('id', id); if (error) throw error; await loadShoppingData(); toast('更新しました'); } catch (error) { toast(`更新に失敗しました: ${error.message}`); } finally { setLoading(false); } }
-
-async function deleteShoppingMasterItem(id) { const item = state.shoppingMaster.find(x => x.id === id); if (!item || !confirm(`「${item.name}」をよく買うものから削除しますか？`)) return; setLoading(true); try { const { error } = await supabase.from('shopping_master').delete().eq('id', id); if (error) throw error; await loadShoppingData(); toast('削除しました'); } catch (error) { toast(`削除に失敗しました: ${error.message}`); } finally { setLoading(false); } }
-
-async function addFreeShoppingItem(event) { event.preventDefault(); const name = $('shoppingFreeName').value.trim(); const category = $('shoppingFreeCategory').value; if (!name) return; setLoading(true); try { const { error } = await supabase.from('shopping_list_items').insert({ name, category }); if (error) throw error; $('shoppingFreeName').value = ''; await loadShoppingData(); toast('買い物リストに追加しました'); } catch (error) { toast(`追加に失敗しました: ${error.message}`); } finally { setLoading(false); } }
-
-function handleShoppingMasterClick(event) { const edit = event.target.closest('.shopping-master-edit'); if (edit) { editShoppingMasterItem(edit.dataset.id); return; } const del = event.target.closest('.shopping-master-delete'); if (del) deleteShoppingMasterItem(del.dataset.id); }
-
-async function commitShoppingPurchaseChanges() { const changes = [...state.shoppingPendingChanges.entries()]; if (!changes.length) return; if (!confirm(`${changes.length}件の購入状態を反映しますか？`)) return; setLoading(true); try { for (const [id, nextPurchased] of changes) { const item = state.shoppingList.find(x => x.id === id); if (!item) { state.shoppingPendingChanges.delete(id); continue; } if (nextPurchased) { const purchasedAt = new Date().toISOString(); const { data: history, error: historyError } = await supabase.from('shopping_purchase_history').insert({ shopping_list_item_id: item.id, name: item.name, category: item.category, master_id: item.master_id, purchased_at: purchasedAt }).select('id').single(); if (historyError) throw historyError; const { error: updateError } = await supabase.from('shopping_list_items').update({ is_purchased: true, purchased_at: purchasedAt, updated_at: new Date().toISOString() }).eq('id', id); if (updateError) { await supabase.from('shopping_purchase_history').delete().eq('id', history.id); throw updateError; } } else { const { data: historyRows, error: historyFindError } = await supabase.from('shopping_purchase_history').select('id').eq('shopping_list_item_id', item.id).eq('purchased_at', item.purchased_at).order('created_at', { ascending: false }).limit(1); if (historyFindError) throw historyFindError; if (historyRows?.length) { const { error: historyDeleteError } = await supabase.from('shopping_purchase_history').delete().eq('id', historyRows[0].id); if (historyDeleteError) throw historyDeleteError; } const { error: updateError } = await supabase.from('shopping_list_items').update({ is_purchased: false, purchased_at: null, updated_at: new Date().toISOString() }).eq('id', id); if (updateError) throw updateError; } state.shoppingPendingChanges.delete(id); } await loadShoppingData(); toast('購入状態を反映しました'); } catch (error) { toast(`購入状態の反映に失敗しました: ${error.message}`); } finally { setLoading(false); } }
-
-function updateShoppingPurchaseButton() { const button = $('applyShoppingPurchase'); const count = state.shoppingPendingChanges.size; button.disabled = count === 0; button.textContent = count ? `購入を反映（${count}件）` : '購入を反映'; }
-
-function renderShoppingList() { const items = state.shoppingList.filter(item => state.showPurchased || !item.is_purchased); $('shoppingList').innerHTML = items.length ? items.map(item => { const pending = state.shoppingPendingChanges.get(item.id); const checked = pending === undefined ? item.is_purchased : pending; return `<div class="shopping-list-item ${checked ? 'purchased' : ''}"><label class="shopping-list-check"><input class="purchase-check" type="checkbox" data-id="${item.id}" ${checked ? 'checked' : ''}><span>${escapeHtml(item.name)}</span></label><span class="shopping-list-category">${escapeHtml(item.category)}</span><span class="shopping-purchased-date">${item.is_purchased ? escapeHtml(formatPurchaseDate(item.purchased_at)) : ''}</span><button class="text-button shopping-delete" type="button" data-id="${item.id}">削除</button></div>`; }).join('') : '<div class="empty">買い物リストは空です。</div>'; updateShoppingPurchaseButton(); }
-
-function formatPurchaseDate(value) { if (!value) return ''; const date = new Date(value); if (Number.isNaN(date.getTime())) return ''; return `${date.getMonth()+1}/${date.getDate()} 購入`; }
-
-function handleShoppingListClick(event) { const button = event.target.closest('.shopping-delete'); if (!button) return; deleteShoppingItem(button.dataset.id); }
-
-async function deleteShoppingItem(id) { if (!confirm('この買い物リスト項目を削除しますか？')) return; setLoading(true); try { const { error } = await supabase.from('shopping_list_items').delete().eq('id', id); if (error) throw error; state.shoppingPendingChanges.delete(id); await loadShoppingData(); toast('削除しました'); } catch (error) { toast(`削除に失敗しました: ${error.message}`); } finally { setLoading(false); } }
-
-async function loadShoppingData() { const [{ data: master, error: masterError }, { data: list, error: listError }] = await Promise.all([supabase.from('shopping_master').select('*').order('category').order('sort_order').order('name'), supabase.from('shopping_list_items').select('*').order('is_purchased').order('created_at', { ascending: false })]); if (masterError) throw masterError; if (listError) throw listError; state.shoppingMaster = master || []; state.shoppingList = list || []; const validIds = new Set(state.shoppingList.map(item => item.id)); for (const id of state.shoppingPendingChanges.keys()) if (!validIds.has(id)) state.shoppingPendingChanges.delete(id); renderShoppingMaster(); renderShoppingList(); }
-
-function openShoppingView() { document.querySelectorAll('.view').forEach(v => v.classList.add('hidden')); $('shoppingView').classList.remove('hidden'); renderShoppingMaster(); renderShoppingList(); }
-
-function openShoppingHistoryView() { document.querySelectorAll('.view').forEach(v => v.classList.add('hidden')); $('shoppingHistoryView').classList.remove('hidden'); renderShoppingHistory(); }
-
-function renderShoppingHistory() { const groups = new Map(); state.shoppingHistory = state.shoppingHistory || []; state.shoppingHistory.forEach(item => { const date = new Date(item.purchased_at); const monthKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`; const dayKey = `${monthKey}-${String(date.getDate()).padStart(2,'0')}`; if (!groups.has(monthKey)) groups.set(monthKey, new Map()); const days = groups.get(monthKey); if (!days.has(dayKey)) days.set(dayKey, []); days.get(dayKey).push(item); }); const html = [...groups.entries()].sort((a,b)=>b[0].localeCompare(a[0])).map(([month,days])=>`<section class="shopping-history-month"><h4>${month.replace('-','年')}月</h4>${[...days.entries()].sort((a,b)=>b[0].localeCompare(a[0])).map(([day,items])=>`<div class="shopping-history-day"><h5>${day.slice(0,4)}年${Number(day.slice(5,7))}月${Number(day.slice(8,10))}日</h5><div class="shopping-history-items">${items.sort((a,b)=>new Date(b.purchased_at)-new Date(a.purchased_at)).map(item=>`<div class="shopping-history-item"><div><span class="shopping-history-name">${escapeHtml(item.name)}</span><span class="shopping-history-category">${escapeHtml(item.category)}</span></div><button class="text-button shopping-history-delete" type="button" data-id="${item.id}">削除</button></div>`).join('')}</div></div>`).join('')}</section>`).join(''); $('shoppingHistory').innerHTML = html || '<div class="empty">買い物履歴はまだありません。</div>'; }
-
-function handleShoppingHistoryClick(event) { const button = event.target.closest('.shopping-history-delete'); if (!button) return; deleteShoppingHistory(button.dataset.id); }
-
-async function deleteShoppingHistory(id) { if (!confirm('この買い物履歴を削除しますか？')) return; setLoading(true); try { const { error } = await supabase.from('shopping_purchase_history').delete().eq('id', id); if (error) throw error; state.shoppingHistory = state.shoppingHistory.filter(item => item.id !== id); renderShoppingHistory(); toast('履歴を削除しました'); } catch (error) { toast(`履歴の削除に失敗しました: ${error.message}`); } finally { setLoading(false); } }
-
-function renderIngredients() { const search = $('ingredientSearch').value.trim().toLowerCase(); const category = $('ingredientCategoryFilter').value; const onlyAvailable = $('ingredientAvailableOnly').checked; const filtered = state.ingredients.filter(item => (!search || item.name.toLowerCase().includes(search)) && (!category || item.category === category) && (!onlyAvailable || item.is_available)); const categories = [...new Set([...INGREDIENT_CATEGORIES, ...state.ingredients.map(item => item.category)])]; const grouped = new Map(categories.map(category => [category, []])); filtered.forEach(item => grouped.get(item.category)?.push(item)); $('ingredientList').innerHTML = filtered.length ? [...grouped.entries()].filter(([,items])=>items.length).map(([category,items])=>`<section class="ingredient-category"><h3>${escapeHtml(category)}</h3><div class="ingredient-items">${items.map(item=>`<div class="ingredient-item ${item.is_available?'is-available':'is-unavailable'}"><div class="ingredient-main"><span class="ingredient-name">${escapeHtml(item.name)}</span><span class="ingredient-status-label">${item.is_available?'ある':'ない'}</span></div><div class="ingredient-actions"><button class="secondary-button ingredient-status" data-id="${item.id}" type="button">${item.is_available?'ないにする':'あるにする'}</button><button class="text-button ingredient-delete" data-id="${item.id}" type="button">削除</button></div></div>`).join('')}</div></section>`).join('') : '<div class="empty">条件に一致する食材はありません。</div>'; }
-
-function setupIngredientUI() { $('ingredientForm').addEventListener('submit', saveIngredient); $('ingredientSearch').addEventListener('input', renderIngredients); $('ingredientCategoryFilter').addEventListener('change', renderIngredients); $('ingredientAvailableOnly').addEventListener('change', renderIngredients); $('ingredientList').addEventListener('click', handleIngredientClick); $('backFromIngredientsButton').addEventListener('click', showListView); }
-
-async function loadIngredients() { const { data, error } = await supabase.from('ingredients').select('*').order('category').order('name'); if (error) throw error; state.ingredients = data || []; renderIngredients(); }
-
-async function saveIngredient(event) { event.preventDefault(); const name = $('ingredientName').value.trim(); const category = $('ingredientCategory').value; if (!name) return; setLoading(true); try { const { error } = await supabase.from('ingredients').insert({name,category,is_available:true}); if (error) throw error; $('ingredientName').value=''; await loadIngredients(); toast('食材を登録しました'); } catch(error){toast(`登録に失敗しました: ${error.message}`);} finally{setLoading(false);} }
-
-async function handleIngredientClick(event) { const status = event.target.closest('.ingredient-status'); if (status) { const item = state.ingredients.find(x=>x.id===status.dataset.id); if (!item) return; await updateIngredientStatus(item); return; } const del = event.target.closest('.ingredient-delete'); if (del) await deleteIngredient(del.dataset.id); }
-
-async function updateIngredientStatus(item) { setLoading(true); try { const { error } = await supabase.from('ingredients').update({is_available:!item.is_available,updated_at:new Date().toISOString()}).eq('id',item.id); if(error) throw error; await loadIngredients(); toast(item.is_available?'「ない」にしました':'「ある」にしました'); } catch(error){toast(`更新に失敗しました: ${error.message}`);} finally{setLoading(false);} }
-
-async function deleteIngredient(id) { const item=state.ingredients.find(x=>x.id===id); if(!item||!confirm(`「${item.name}」の登録を削除しますか？`)) return; setLoading(true); try { const { error } = await supabase.from('ingredients').delete().eq('id',id); if(error) throw error; await loadIngredients(); toast('削除しました'); } catch(error){toast(`削除に失敗しました: ${error.message}`);} finally{setLoading(false);} }
-
-function openIngredientsView() { document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden')); $('ingredientsView').classList.remove('hidden'); renderIngredients(); }
-
-function showListView() { document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden')); $('listView').classList.remove('hidden'); }
-
-function showRecipeDetail(id) { state.detailId = id; document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden')); $('detailView').classList.remove('hidden'); renderRecipeDetail(); }
-
-function openRecipeForm(id = null) { state.editingId = id; document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden')); $('formView').classList.remove('hidden'); renderRecipeForm(id); }
-
-function handleRecipeListClick(event) { const item = event.target.closest('.recipe-item'); if (item) showRecipeDetail(item.dataset.id); }
-
-function handleDetailClick(event) { const edit = event.target.closest('[data-action="edit"]'); if (edit) openRecipeForm(edit.dataset.id); const del = event.target.closest('[data-action="delete"]'); if (del) deleteRecipe(del.dataset.id); }
-
-async function loadTags() { const { data, error } = await supabase.from('tags').select('*').order('name'); if (error) throw error; state.tags = data || []; renderFilterOptions(); }
-
-function renderFilterOptions() { $('categoryFilter').innerHTML = '<option value="">主カテゴリすべて</option>' + CATEGORIES.map(x=>`<option>${escapeHtml(x)}</option>`).join(''); $('genreFilter').innerHTML = '<option value="">ジャンルすべて</option>' + GENRES.map(x=>`<option>${escapeHtml(x)}</option>`).join(''); $('tagFilter').innerHTML = '<option value="">タグすべて</option>' + state.tags.map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join(''); }
-
-async function loadRecipes() { const { data, error } = await supabase.from('recipes').select('*,recipe_ingredients(*),recipe_tags(tag_id,tags(*))').order('created_at',{ascending:false}); if(error) throw error; state.recipes=data||[]; }
-
-function renderRecipeList() { const keyword=$('searchInput').value.trim().toLowerCase(); const category=$('categoryFilter').value; const genre=$('genreFilter').value; const tagId=$('tagFilter').value; const favorite=$('favoriteFilter').checked; const filtered=state.recipes.filter(r=>(!keyword||(r.name||'').toLowerCase().includes(keyword)||(r.recipe_ingredients||[]).some(i=>(i.name||'').toLowerCase().includes(keyword)))&&(!category||r.category===category)&&(!genre||r.genre===genre)&&(!tagId||(r.recipe_tags||[]).some(t=>t.tag_id===tagId))&&(!favorite||r.is_favorite)); $('recipeList').innerHTML=filtered.length?filtered.map(r=>`<article class="recipe-item" data-id="${r.id}"><div class="recipe-item-top"><div><h3>${escapeHtml(r.name)}</h3><div class="meta">${escapeHtml(r.category)} / ${escapeHtml(r.genre)}</div><div class="tags">${(r.recipe_tags||[]).map(t=>`<span class="tag">${escapeHtml(t.tags?.name)}</span>`).join('')}</div></div><div class="favorite">${r.is_favorite?'★':'☆'}</div></div></article>`).join(''):'<div class="empty">レシピがありません。</div>'; }
-
-function addIngredientRow(data={}) { const row=document.createElement('div'); row.className='ingredient-row'; row.innerHTML=`<input data-field="name" value="${escapeHtml(data.name||'')}"><input data-field="quantity" value="${escapeHtml(data.quantity||'')}"><input data-field="unit" value="${escapeHtml(data.unit||'')}"><input data-field="note" value="${escapeHtml(data.note||'')}"><button type="button" class="remove-button">削除</button>`; $('ingredientRows').appendChild(row); }
-
-function addInstructionRow(text='') { const row=document.createElement('div'); row.className='instruction-row'; row.innerHTML=`<span class="instruction-number">${$('instructionRows').children.length+1}</span><textarea>${escapeHtml(text)}</textarea><button type="button" class="remove-button">削除</button>`; $('instructionRows').appendChild(row); }
-
-function toggleTagChoice(event) { const button=event.target.closest('.tag-choice'); if(button) button.classList.toggle('selected'); }
-
-function renderRecipeForm(id) { const recipe=id?state.recipes.find(r=>r.id===id):null; $('recipeFormTitle').textContent=recipe?'レシピ編集':'レシピ登録'; $('recipeName').value=recipe?.name||''; $('recipeCategory').value=recipe?.category||'主菜'; $('recipeGenre').value=recipe?.genre||'和食'; $('recipeDescription').value=recipe?.description||''; $('recipeTime').value=recipe?.cooking_time||''; $('recipeServings').value=recipe?.servings||''; $('recipeMemo').value=recipe?.memo||''; $('recipeFavorite').checked=!!recipe?.is_favorite; $('recipeMakeAgain').checked=!!recipe?.make_again; $('ingredientRows').innerHTML=''; (recipe?.recipe_ingredients?.length?recipe.recipe_ingredients:[{}]).forEach(addIngredientRow); $('instructionRows').innerHTML=''; (recipe?.instructions?.length?recipe.instructions:['']).forEach(addInstructionRow); const selected=new Set((recipe?.recipe_tags||[]).map(x=>x.tag_id)); $('tagChoices').innerHTML=state.tags.map(t=>`<button type="button" class="tag-choice ${selected.has(t.id)?'selected':''}" data-id="${t.id}">${escapeHtml(t.name)}</button>`).join(''); }
-
-async function saveRecipe(event) { event.preventDefault(); const payload={name:$('recipeName').value.trim(),category:$('recipeCategory').value,genre:$('recipeGenre').value,description:$('recipeDescription').value.trim(),cooking_time:$('recipeTime').value?Number($('recipeTime').value):null,servings:$('recipeServings').value?Number($('recipeServings').value):null,memo:$('recipeMemo').value.trim(),is_favorite:$('recipeFavorite').checked,make_again:$('recipeMakeAgain').checked,instructions:[...$('instructionRows').querySelectorAll('textarea')].map(x=>x.value.trim()).filter(Boolean)}; if(!payload.name){toast('レシピ名を入力してください');return;} setLoading(true); try { let recipeId=state.editingId; if(recipeId){const {error}=await supabase.from('recipes').update(payload).eq('id',recipeId);if(error)throw error;}else{const {data,error}=await supabase.from('recipes').insert(payload).select('id').single();if(error)throw error;recipeId=data.id;} await supabase.from('recipe_ingredients').delete().eq('recipe_id',recipeId); const rows=[...$('ingredientRows').children].map(row=>({recipe_id:recipeId,name:row.querySelector('[data-field="name"]').value.trim(),quantity:row.querySelector('[data-field="quantity"]').value.trim(),unit:row.querySelector('[data-field="unit"]').value.trim(),note:row.querySelector('[data-field="note"]').value.trim()})).filter(x=>x.name); if(rows.length){const {error}=await supabase.from('recipe_ingredients').insert(rows);if(error)throw error;} await supabase.from('recipe_tags').delete().eq('recipe_id',recipeId); const tagRows=[...$('tagChoices').querySelectorAll('.tag-choice.selected')].map(button=>({recipe_id:recipeId,tag_id:button.dataset.id})); if(tagRows.length){const {error}=await supabase.from('recipe_tags').insert(tagRows);if(error)throw error;} await loadRecipes(); showListView(); renderRecipeList(); toast('保存しました'); } catch(error){toast(`保存に失敗しました: ${error.message}`);} finally{setLoading(false);} }
-
-async function deleteRecipe(id) { const recipe=state.recipes.find(r=>r.id===id); if(!recipe||!confirm(`「${recipe.name}」を削除しますか？`))return; setLoading(true); try { const {error}=await supabase.from('recipe_ingredients').delete().eq('recipe_id',id);if(error)throw error; const {error:tagError}=await supabase.from('recipe_tags').delete().eq('recipe_id',id);if(tagError)throw tagError; const {error:recipeError}=await supabase.from('recipes').delete().eq('id',id);if(recipeError)throw recipeError; await loadRecipes();showListView();renderRecipeList();toast('削除しました'); } catch(error){toast(`削除に失敗しました: ${error.message}`);} finally{setLoading(false);} }
-
+function setupPurchaseSelection(){const label=$('showPurchased').closest('.check-filter'),actions=document.createElement('div');actions.className='header-actions';const b=document.createElement('button');b.id='applyShoppingPurchase';b.type='button';b.className='primary-button';b.textContent='購入を反映';b.disabled=true;actions.appendChild(b);label.parentElement.appendChild(actions);actions.appendChild(label);$('shoppingList').addEventListener('change',e=>{const input=e.target.closest('.purchase-check');if(!input)return;e.preventDefault();e.stopImmediatePropagation();const id=input.dataset.id,item=state.shoppingList.find(x=>x.id===id);if(!item)return;if(input.checked===item.is_purchased)state.shoppingPendingChanges.delete(id);else state.shoppingPendingChanges.set(id,input.checked);updatePurchaseButton()},true);b.onclick=commitPurchaseChanges}
+function updatePurchaseButton(){const b=$('applyShoppingPurchase');if(!b)return;const n=state.shoppingPendingChanges.size;b.disabled=!n;b.textContent=n?`購入を反映（${n}件）`:'購入を反映'}
+async function commitPurchaseChanges(){const changes=[...state.shoppingPendingChanges.entries()];if(!changes.length)return;if(!confirm(`${changes.length}件の購入状態を反映しますか？`))return;loading(true);try{for(const[id,next]of changes){const item=state.shoppingList.find(x=>x.id===id);if(!item){state.shoppingPendingChanges.delete(id);continue}if(next&&!item.is_purchased){const at=new Date().toISOString();const{error:hErr}=await supabase.from('shopping_purchase_history').insert({shopping_list_item_id:id,name:item.name,category:item.category,master_id:item.master_id,purchased_at:at});if(hErr)throw hErr;const{error:e}=await supabase.from('shopping_list_items').update({is_purchased:true,purchased_at:at,updated_at:new Date().toISOString()}).eq('id',id);if(e)throw e}else if(!next&&item.is_purchased){if(item.purchased_at){const{data:h}=await supabase.from('shopping_purchase_history').select('id').eq('shopping_list_item_id',id).eq('purchased_at',item.purchased_at).maybeSingle();if(h)await supabase.from('shopping_purchase_history').delete().eq('id',h.id)}const{error:e}=await supabase.from('shopping_list_items').update({is_purchased:false,purchased_at:null,updated_at:new Date().toISOString()}).eq('id',id);if(e)throw e}state.shoppingPendingChanges.delete(id)}await loadShopping();toast('購入状態を反映しました')}catch(e){toast(`購入状態を反映できませんでした: ${e.message}`)}finally{loading(false)}}
+async function loadTags(){const{data,error}=await supabase.from('tags').select('id,name').order('name');if(error)throw error;state.tags=data||[];fillSelect($('tagFilter'),state.tags.map(x=>x.name),'タグすべて')}
+async function loadRecipes(){const{data,error}=await supabase.from('recipes').select('*,recipe_ingredients(*),recipe_tags(tag_id,tags(id,name))').order('updated_at',{ascending:false});if(error)throw error;state.recipes=data||[];renderList()}
+function recipeTags(r){return(r.recipe_tags||[]).map(x=>x.tags).filter(Boolean)}
+function renderList(){const q=$('searchInput').value.trim().toLowerCase(),cat=$('categoryFilter').value,genre=$('genreFilter').value,tag=$('tagFilter').value,fav=$('favoriteFilter').checked;const rows=state.recipes.filter(r=>(!q||`${r.name} ${(r.recipe_ingredients||[]).map(i=>i.ingredient_name).join(' ')}`.toLowerCase().includes(q))&&(!cat||r.cooking_category===cat)&&(!genre||r.genre===genre)&&(!tag||recipeTags(r).some(t=>t.name===tag))&&(!fav||r.is_favorite));$('recipeList').innerHTML=rows.length?rows.map(r=>`<article class="recipe-item" data-id="${r.id}"><div class="recipe-item-top"><div><h3>${esc(r.name)}</h3><div class="meta">${esc(r.cooking_category)} ・ ${esc(r.genre)}</div></div><div class="favorite">${r.is_favorite?'★':''}</div></div>${r.description?`<p class="meta">${esc(r.description)}</p>`:''}<div class="tags">${recipeTags(r).map(t=>`<span class="tag">${esc(t.name)}</span>`).join('')}</div></article>`).join(''):'<div class="empty">レシピがありません。<br>「＋ レシピ登録」から登録できます。</div>';document.querySelectorAll('.recipe-item').forEach(e=>e.onclick=()=>openDetail(e.dataset.id))}
+function resetIngredientRows(items=[{}]){$('ingredientRows').innerHTML='';items.forEach(addIngredientRow)}
+function addIngredientRow(item={}){const r=document.createElement('div');r.className='ingredient-row';r.innerHTML=`<input class="ingredient-name" placeholder="材料名" value="${esc(item.ingredient_name||'')}"><input class="ingredient-amount" placeholder="分量" value="${esc(item.amount||'')}"><input class="ingredient-unit" placeholder="単位" value="${esc(item.unit||'')}"><input class="ingredient-note" placeholder="メモ（下味など）" value="${esc(item.note||'')}"><button type="button" class="remove-button">削除</button>`;r.querySelector('.remove-button').onclick=()=>{r.remove();if(!$('ingredientRows').children.length)addIngredientRow()};$('ingredientRows').appendChild(r)}
+function resetInstructions(items=['']){$('instructionRows').innerHTML='';items.forEach(addInstructionRow)}
+function addInstructionRow(text=''){const r=document.createElement('div');r.className='instruction-row';r.innerHTML=`<span class="instruction-number"></span><textarea rows="2" placeholder="作り方を入力">${esc(text)}</textarea><button type="button" class="remove-button">削除</button>`;r.querySelector('.remove-button').onclick=()=>{r.remove();renumberInstructions()};$('instructionRows').appendChild(r);renumberInstructions()}
+function renumberInstructions(){[...$('instructionRows').children].forEach((r,i)=>r.querySelector('.instruction-number').textContent=i+1)}
+function renderTagChoices(selected=[]){$('tagChoices').innerHTML=state.tags.map(t=>`<button type="button" class="tag-choice ${selected.includes(t.id)?'selected':''}" data-tag="${t.id}">${esc(t.name)}</button>`).join('');document.querySelectorAll('.tag-choice').forEach(b=>b.onclick=()=>b.classList.toggle('selected'))}
+async function openForm(id=null){state.editingId=id;$('formTitle').textContent=id?'レシピ編集':'レシピ登録';if(!id){$('recipeForm').reset();resetIngredientRows();resetInstructions();renderTagChoices();view('formView');return}loading(true);try{const r=state.recipes.find(x=>x.id===id)||await fetchRecipe(id);$('recipeForm').elements.name.value=r.name||'';$('recipeForm').elements.description.value=r.description||'';$('formCategory').value=r.cooking_category;$('formGenre').value=r.genre;$('recipeForm').elements.is_favorite.checked=!!r.is_favorite;$('recipeForm').elements.make_again.checked=!!r.make_again;$('recipeForm').elements.memo.value=r.memo||'';resetIngredientRows(r.recipe_ingredients||[]);resetInstructions(Array.isArray(r.instructions)?r.instructions:[]);renderTagChoices(recipeTags(r).map(t=>t.id));view('formView')}catch(e){toast(e.message)}finally{loading(false)}}
+async function fetchRecipe(id){const{data,error}=await supabase.from('recipes').select('*,recipe_ingredients(*),recipe_tags(tag_id,tags(id,name))').eq('id',id).single();if(error)throw error;return data}
+async function saveRecipe(e){e.preventDefault();const f=$('recipeForm'),ingredients=[...document.querySelectorAll('.ingredient-row')].map(r=>({ingredient_name:r.querySelector('.ingredient-name').value.trim(),amount:r.querySelector('.ingredient-amount').value.trim()||null,unit:r.querySelector('.ingredient-unit').value.trim()||null,note:r.querySelector('.ingredient-note').value.trim()||null})).filter(x=>x.ingredient_name),instructions=[...document.querySelectorAll('.instruction-row textarea')].map(x=>x.value.trim()).filter(Boolean),tagIds=[...document.querySelectorAll('.tag-choice.selected')].map(x=>x.dataset.tag);const base={name:f.elements.name.value.trim(),description:f.elements.description.value.trim()||null,cooking_category:f.elements.cooking_category.value,genre:f.elements.genre.value,instructions,is_favorite:f.elements.is_favorite.checked,make_again:f.elements.make_again.checked,memo:f.elements.memo.value.trim()||null};if(!base.name){toast('レシピ名を入力してください');return}loading(true);try{let id=state.editingId;if(id){const{error}=await supabase.from('recipes').update(base).eq('id',id);if(error)throw error}else{const{data,error}=await supabase.from('recipes').insert(base).select('id').single();if(error)throw error;id=data.id}let r=await supabase.from('recipe_ingredients').delete().eq('recipe_id',id);if(r.error)throw r.error;if(ingredients.length){r=await supabase.from('recipe_ingredients').insert(ingredients.map((x,i)=>({...x,recipe_id:id,sort_order:i})));if(r.error)throw r.error}r=await supabase.from('recipe_tags').delete().eq('recipe_id',id);if(r.error)throw r.error;if(tagIds.length){r=await supabase.from('recipe_tags').insert(tagIds.map(tag_id=>({recipe_id:id,tag_id})));if(r.error)throw r.error}await loadRecipes();await openDetail(id);toast('保存しました')}catch(e){toast(`保存できませんでした: ${e.message}`)}finally{loading(false)}}
+async function openDetail(id){state.detailId=id;loading(true);try{const r=await fetchRecipe(id),tags=recipeTags(r),ings=r.recipe_ingredients||[],ins=Array.isArray(r.instructions)?r.instructions:[];$('recipeDetail').innerHTML=`<div class="detail-header"><h2>${esc(r.name)}</h2><p class="detail-description">${esc(r.description||'')}</p><div class="detail-meta"><span class="tag">${esc(r.cooking_category)}</span><span class="tag">${esc(r.genre)}</span>${tags.map(t=>`<span class="tag">${esc(t.name)}</span>`).join('')}</div><div class="detail-flags">${r.is_favorite?'★ お気に入り':''}${r.make_again?'　↻ また作りたい':''}</div></div><section class="detail-section"><h3>材料</h3><ul class="ingredient-list">${ings.map(i=>`<li><span>${esc(i.ingredient_name)}</span><span>${esc([i.amount,i.unit].filter(Boolean).join(' '))}</span><span>${esc(i.note||'')}</span></li>`).join('')||'<li class="no-data">材料なし</li>'}</ul></section><section class="detail-section"><h3>作り方</h3><ol class="instruction-list">${ins.map(i=>`<li>${esc(i)}</li>`).join('')||'<li class="no-data">手順なし</li>'}</ol></section>${r.memo?`<section class="detail-section"><h3>メモ</h3><div class="memo">${esc(r.memo)}</div></section>`:''}`;view('detailView')}catch(e){toast(e.message)}finally{loading(false)}}
+async function deleteCurrentRecipe(){if(!state.detailId||!confirm('このレシピを削除しますか？'))return;loading(true);try{const{error}=await supabase.from('recipes').delete().eq('id',state.detailId);if(error)throw error;state.detailId=null;await loadRecipes();view('listView');toast('削除しました')}catch(e){toast(`削除できませんでした: ${e.message}`)}finally{loading(false)}}
+async function ensureShoppingMaster(){const{data,error}=await supabase.from('shopping_master').select('id').limit(1);if(error)throw error;if(data?.length)return;const rows=DEFAULT_SHOPPING_MASTER.flatMap(([cat,names],ci)=>names.map((name,i)=>({name,category:cat,sort_order:ci*100+i})));const{error:e}=await supabase.from('shopping_master').upsert(rows,{onConflict:'user_id,name',ignoreDuplicates:true});if(e)throw e}
+async function loadShopping(){await ensureShoppingMaster();const[{data:m,error:me},{data:l,error:le}]=await Promise.all([supabase.from('shopping_master').select('*').eq('is_active',true).order('sort_order'),supabase.from('shopping_list_items').select('*').order('created_at',{ascending:true})]);if(me)throw me;if(le)throw le;state.shoppingMaster=m||[];state.shoppingList=l||[];renderShoppingMaster();renderShoppingList()}
+function renderShoppingMaster(){const selected=new Set([...document.querySelectorAll('.shopping-master-check:checked')].map(x=>x.dataset.id));$('shoppingMaster').innerHTML=SHOPPING_CATEGORIES.map(cat=>{const items=state.shoppingMaster.filter(x=>x.category===cat);if(!items.length)return '';return `<section class="shopping-category"><h3>${esc(cat)}</h3><div class="shopping-master-items">${items.map(x=>`<label class="shopping-master-item-wrap"><span class="shopping-master-item"><input class="shopping-master-check" type="checkbox" data-id="${x.id}" ${selected.has(x.id)?'checked':''}><span>${esc(x.name)}</span></span></label>`).join('')}</div></section>`}).join('')}
+async function addShoppingMasterItem(e){e.preventDefault();const name=$('shoppingMasterInputName').value.trim(),category=$('shoppingMasterInputCategory').value;if(!name)return;if(state.shoppingMaster.some(x=>x.name===name)){toast('その商品はすでに登録されています');return}loading(true);try{const{error}=await supabase.from('shopping_master').insert({name,category,sort_order:state.shoppingMaster.length});if(error)throw error;$('shoppingMasterInputName').value='';await loadShopping();toast('よく買うものに追加しました')}catch(e){toast(`追加できませんでした: ${e.message}`)}finally{loading(false)}}
+async function addSelectedShoppingItems(){const inputs=[...document.querySelectorAll('.shopping-master-check:checked')];if(!inputs.length){toast('追加する商品を選択してください');return}const ids=inputs.map(x=>x.dataset.id),existing=new Set(state.shoppingList.filter(x=>!x.is_purchased).map(x=>x.name)),rows=state.shoppingMaster.filter(x=>ids.includes(x.id)&&!existing.has(x.name)).map(x=>({master_id:x.id,name:x.name,category:x.category,is_purchased:false}));if(!rows.length){toast('選択した商品はすでに買い物リストにあります');return}loading(true);try{const{error}=await supabase.from('shopping_list_items').insert(rows);if(error)throw error;await loadShopping();toast(`${rows.length}件を買い物リストに追加しました`)}catch(e){toast(`追加できませんでした: ${e.message}`)}finally{loading(false)}}
+async function addFreeShoppingItem(e){e.preventDefault();const name=$('shoppingInputName').value.trim(),category=$('shoppingInputCategory').value;if(!name)return;if(state.shoppingList.some(x=>!x.is_purchased&&x.name===name)){toast('その商品はすでに買い物リストにあります');return}loading(true);try{const{error}=await supabase.from('shopping_list_items').insert({name,category,is_purchased:false});if(error)throw error;$('shoppingInputName').value='';await loadShopping();toast('買い物リストに追加しました')}catch(e){toast(`追加できませんでした: ${e.message}`)}finally{loading(false)}}
+function renderShoppingList(){const list=[...state.shoppingList].sort((a,b)=>a.is_purchased!==b.is_purchased?(a.is_purchased?1:-1):new Date(a.created_at)-new Date(b.created_at)),visible=state.showPurchased?list:list.filter(x=>!x.is_purchased),p=list.filter(x=>x.is_purchased).length;$('shoppingListSummary').textContent=list.length?`${list.length}件（未購入 ${list.length-p}件・購入済み ${p}件）`:'まだ商品がありません';$('shoppingList').innerHTML=visible.length?visible.map(x=>{const pending=state.shoppingPendingChanges.get(x.id),checked=pending!==undefined?pending:x.is_purchased;return `<div class="shopping-list-item ${x.is_purchased?'purchased':''}"><label class="shopping-list-check"><input type="checkbox" class="purchase-check" data-id="${x.id}" ${checked?'checked':''}><span>${esc(x.name)}</span></label><span class="shopping-list-category">${esc(x.category)}</span><span class="shopping-purchased-date">${x.is_purchased&&x.purchased_at?`購入日 ${esc(new Date(x.purchased_at).toLocaleDateString('ja-JP'))}`:''}</span><button type="button" class="remove-button shopping-delete" data-id="${x.id}">削除</button></div>`}).join(''):`<div class="empty">${list.length?'購入済みの商品はありません。':'買い物リストは空です。'}</div>`;document.querySelectorAll('.shopping-delete').forEach(b=>b.onclick=()=>deleteShoppingItem(b.dataset.id));updatePurchaseButton()}
+async function deleteShoppingItem(id){if(!confirm('この商品を買い物リストから削除しますか？'))return;loading(true);try{const{error}=await supabase.from('shopping_list_items').delete().eq('id',id);if(error)throw error;state.shoppingPendingChanges.delete(id);await loadShopping();toast('削除しました')}catch(e){toast(`削除できませんでした: ${e.message}`)}finally{loading(false)}}
+async function openShopping(){loading(true);try{await loadShopping();view('shoppingView')}catch(e){toast(`買い物データを読み込めませんでした: ${e.message}`)}finally{loading(false)}}
+async function init(){setup();loading(true);try{await ensureAuth();await loadTags();await loadRecipes()}catch(e){console.error(e);toast(`初期化できませんでした: ${e.message}`)}finally{loading(false)}}
 init();
