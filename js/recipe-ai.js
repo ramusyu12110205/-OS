@@ -112,26 +112,32 @@ async function loadAvailableTags() {
 }
 
 function setIngredientRows(items) {
-  const container = $('ingredientRows');
-  if (!container) return;
-  container.innerHTML = '';
-  items.forEach(item => {
+  const api = window.gohanOSRecipeIngredients;
+  if (api?.reset) {
+    api.reset(Array.isArray(items) ? items : []);
+    return;
+  }
+  const food = $('foodIngredientRows');
+  const seasonings = $('seasoningIngredientRows');
+  if (!food || !seasonings) return;
+  food.innerHTML = '';
+  seasonings.innerHTML = '';
+  (Array.isArray(items) ? items : []).forEach(item => {
+    const type = item.ingredient_type === 'seasoning' ? 'seasoning' : 'food';
     const row = document.createElement('div');
     row.className = 'ingredient-row';
-    row.innerHTML = `<input class="ingredient-name" placeholder="材料名" value="${esc(item.ingredient_name)}"><input class="ingredient-amount" placeholder="分量" value="${esc(item.amount)}"><input class="ingredient-unit" placeholder="単位" value="${esc(item.unit)}"><input class="ingredient-note" placeholder="メモ（下味など）" value="${esc(item.note)}"><button type="button" class="remove-button">削除</button>`;
-    row.querySelector('.remove-button').onclick = () => { row.remove(); if (!container.children.length) addEmptyIngredientRow(); };
-    container.appendChild(row);
+    row.dataset.ingredientType = type;
+    row.innerHTML = `<input class="ingredient-name" placeholder="材料名" value="${esc(item.ingredient_name)}"><select class="ingredient-type" aria-label="分類"><option value="food">食材</option><option value="seasoning">調味料</option></select><input class="ingredient-amount" placeholder="分量" value="${esc(item.amount)}"><input class="ingredient-unit" placeholder="単位" value="${esc(item.unit)}"><input class="ingredient-note" placeholder="メモ（下味など）" value="${esc(item.note)}"><button type="button" class="remove-button">削除</button>`;
+    const selector = row.querySelector('.ingredient-type');
+    selector.value = type;
+    selector.onchange = () => {
+      row.dataset.ingredientType = selector.value;
+      (selector.value === 'seasoning' ? seasonings : food).appendChild(row);
+    };
+    row.querySelector('.remove-button').onclick = () => row.remove();
+    (type === 'seasoning' ? seasonings : food).appendChild(row);
   });
-  if (!items.length) addEmptyIngredientRow();
-}
-
-function addEmptyIngredientRow() {
-  const container = $('ingredientRows');
-  const row = document.createElement('div');
-  row.className = 'ingredient-row';
-  row.innerHTML = '<input class="ingredient-name" placeholder="材料名"><input class="ingredient-amount" placeholder="分量"><input class="ingredient-unit" placeholder="単位"><input class="ingredient-note" placeholder="メモ（下味など）"><button type="button" class="remove-button">削除</button>';
-  row.querySelector('.remove-button').onclick = () => { row.remove(); if (!container.children.length) addEmptyIngredientRow(); };
-  container.appendChild(row);
+  if (!food.children.length && !seasonings.children.length && api?.add) api.add({});
 }
 
 function setInstructions(items) {
