@@ -178,4 +178,4 @@ function lockGohanOS() {
   showPinModal('unlock');
 }
 
-queueMicrotask(() => import('./recipe-ai.js?v=20261013-2'));
+queueMicrotask(() => import('./recipe-ai.js?v=20261013-3'));
