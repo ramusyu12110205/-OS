@@ -177,3 +177,5 @@ function lockGohanOS() {
   updateAuthButton();
   showPinModal('unlock');
 }
+
+queueMicrotask(() => import('./recipe-ai.js?v=20261013-1'));
