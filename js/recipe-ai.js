@@ -1,4 +1,4 @@
-import { supabase } from './supabase.js?v=20261007-1';
+import { supabase } from './supabase.js?v=20261013-1';
 
 const AI_PURPOSES = ['時短', '節約', '子ども向け', '野菜多め', 'ボリューム', '洗い物少なめ'];
 const AI_STYLES = ['定番', 'アレンジ', 'お店っぽい', 'あっさり', 'ガッツリ'];
